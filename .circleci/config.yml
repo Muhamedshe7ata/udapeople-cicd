@@ -232,44 +232,26 @@ jobs:
             - project/.circleci/ansible/inventory.txt
       - destroy-environment
 
-  # configure-infrastructure:
-  #   docker:
-  #      - image: cimg/base:stable  
-  #   steps:
-  #     - checkout
-  #     - install_ansible
-  #     - add_ssh_keys:
-  #         fingerprints: ["SHA256:FJogcncZoAfN0hgvqhqDgAiiOafEii9G+HsAStU+Ok4"]
-  #     - attach_workspace:
-  #         at: ~/
-  #     - run:
-  #         name: Configure Server
-  #         command: |
-  #          cd .circleci/ansible
-  #          cat inventory.txt
-  #          ansible-playbook -i inventory.txt configure-server.yml
-  #     - destroy-environment
-  # configure-infrastructure:
-  #    docker:
-  #      - image: cimg/base:stable
-  #    steps:
-  #     - checkout
-  #     - install_ansible 
-  #     - add_ssh_keys:
-  #         fingerprints: ["SHA256:FJogcncZoAfN0hgvqhqDgAiiOafEii9G+HsAStU+Ok4"]
-  #     - attach_workspace: # Attach the workspace persisted by deploy-infrastructure
-  #         at: ~/
-  #     - run:
-  #         name: Configure Server
-  #         command: |
-  #          # Assuming inventory.txt is now at ~/project/.circleci/ansible/inventory.txt due to attach_workspace
-  #          cd ~/project/.circleci/ansible # Adjust path if needed based on persist/attach
-  #          cat inventory.txt
-  #          ansible-playbook -i inventory.txt configure-server.yml
-  #     - destroy-environment: # Call destroy, maybe on failure of configuration
-  #         # Again, the 'when: on_fail' inside the command controls the AWS calls
-  #         Workflow_ID: ${CIRCLE_WORKFLOW_ID:0:7}
-  #     # Here's where you will add some code to rollback on failure      
+  configure-infrastructure:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - checkout
+      - install_ansible
+      - add_ssh_keys:
+          fingerprints: [" SHA256:FJogcncZoAfN0hgvqhqDgAiiOafEii9G+HsAStU+Ok4"]
+      - attach_workspace:  
+          at: ~/
+
+      - run:
+          name: Configure server
+          command: |
+            cd .circleci/ansible
+            cat inventory.txt
+            ansible-playbook -i inventory.txt configure-server.yml
+          
+      - destroy-environment:
+          workflow_id: "${CIRCLE_WORKFLOW_ID:0:7}"    
 
   run-migrations:
     docker:
@@ -412,7 +394,7 @@ workflows:
       - configure-infrastructure:
           requires: [deploy-infrastructure]
       - run-migrations:
-          requires: []
+          requires: [configure-infrastructure]
       # - deploy-frontend:
       #     requires: [run-migrations]
       # - deploy-backend:
