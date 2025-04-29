@@ -251,7 +251,7 @@ jobs:
             ansible-playbook -i inventory.txt configure-server.yml
           
       - destroy-environment:
-          workflow_id: "${CIRCLE_WORKFLOW_ID:0:7}"    
+          # workflow_id: "${CIRCLE_WORKFLOW_ID:0:7}"    
 
   run-migrations:
     docker:

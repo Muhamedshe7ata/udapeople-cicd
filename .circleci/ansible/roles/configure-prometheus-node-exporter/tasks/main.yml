@@ -1,10 +1,10 @@
----
 - name: "install node exporter."
+  become: true
   unarchive:
     src: https://github.com/prometheus/node_exporter/releases/download/v1.3.1/node_exporter-1.3.1.linux-amd64.tar.gz
     dest: /tmp
     remote_src: yes
-    validate_certs: false 
+
 - name: "move binary to /usr/local/bin."
   become: true
   copy:
@@ -14,7 +14,7 @@
     mode: '0777'
     
 - name: "add node exporter configuration."
-  become: true  
+  become: true
   copy:
     src: node_exporter.service
     dest: /etc/systemd/system/
@@ -26,60 +26,4 @@
     daemon_reload: yes
     name: node_exporter
     enabled: yes
-
-
-# ### ai code :
-# ---
-# - name: "Download node exporter archive on target using curl"
-#   ansible.builtin.shell:
-#     cmd: "curl -L -s -S -o {{ node_exporter_archive_path }} {{ node_exporter_download_url }}"
-#     creates: "{{ node_exporter_archive_path }}"
-#   register: download_result
-#   failed_when: download_result.rc != 0 and 'already exists' not in download_result.stderr|default('')
-#   become: false # Downloading to /tmp usually doesn't require root
-
-# # Task 2: Unarchive the file already downloaded locally ON THE TARGET
-# - name: "Unarchive the downloaded node exporter file"
-#   ansible.builtin.unarchive:
-#     src: "{{ node_exporter_archive_path }}" # Source is the local file on the target
-#     dest: /tmp # Destination for extraction
-#     remote_src: yes # Indicate src is on the target
-#   become: true # Run unarchive as root to avoid permission issues <--- *** ADDED THIS ***
-
-# # Task 3: Move the binary to the final location
-# - name: "Move node_exporter binary to {{ node_exporter_binary_path }}"
-#   ansible.builtin.copy:
-#     # Assuming unarchive *does* create the subdirectory when run correctly
-#     src: "{{ node_exporter_extract_path }}/node_exporter"
-#     dest: "{{ node_exporter_binary_path }}"
-#     remote_src: yes
-#     mode: '0755'
-#     owner: root
-#     group: root
-#   become: true # Needs privileges to write to /usr/local/bin
-
-# # Task 4: Add node exporter systemd configuration
-# - name: "Add node exporter configuration."
-#   ansible.builtin.copy:
-#     src: node_exporter.service # Assuming this file is in the role's files/ or templates/ dir
-#     dest: "{{ node_exporter_service_path }}"
-#   become: true # Needs privileges to write to /etc/systemd/system
-
-# # Task 5: Enable and start the node_exporter service
-# - name: "Enable and start node_exporter service"
-#   ansible.builtin.systemd:
-#     state: restarted
-#     daemon_reload: yes # Important after changing service file
-#     name: node_exporter
-#     enabled: yes
-#   become: true # Needs privileges to manage services
-
-# # Task 6: Clean up temporary files (Optional but recommended)
-# - name: "Remove temporary archive and extracted files/directory"
-#   ansible.builtin.file:
-#     path: "{{ item }}"
-#     state: absent
-#   loop:
-#     - "{{ node_exporter_archive_path }}"    # The .tar.gz file
-#     - "{{ node_exporter_extract_path }}"  # The extracted directory
-#   become: true # May not need root for /tmp cleanup, adjust if needed
+### from my repo 2022
