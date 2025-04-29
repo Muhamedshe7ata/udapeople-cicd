@@ -245,13 +245,19 @@ jobs:
           command: |
             sudo apt-get update
             sudo apt-get install -y ansible python3 python3-pip
-
+      - run:
+          name: Generate Ansible Inventory
+          command: |
+            mkdir -p .circleci/ansible # Ensure the directory exists
+            echo "[your_servers_group]" > .circleci/ansible/inventory.txt # Optional: add a group
+            
+            echo "$TARGET_SERVER_IP ansible_user=ubuntu" >> .circleci/ansible/inventory.txt
       - run:
           name: Configure server
           command: |
             
-            cd .circleci/ansible # Adjust path if necessary
-            ansible-playbook -i inventory.txt configure-server.yml
+            cd .circleci/ansible && ansible-playbook -i inventory.txt configure-server.yml
+             
           
       # - destroy-environment:
       #     # workflow_id: "${CIRCLE_WORKFLOW_ID:0:7}"    
