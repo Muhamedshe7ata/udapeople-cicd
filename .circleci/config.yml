@@ -243,12 +243,14 @@ jobs:
       - run:
           name: Insall dependencies
           command: |
-            apk add --update ansible
+            sudo apt-get update
+            sudo apt-get install -y ansible python3 python3-pip
 
       - run:
           name: Configure server
           command: |
             
+            cd .circleci/ansible # Adjust path if necessary
             ansible-playbook -i inventory.txt configure-server.yml
           
       # - destroy-environment:
