@@ -32,8 +32,8 @@
     - setup:
     # Within your Ansible playbook file (e.g., configure-server.yml)
 
-    - name: Import NodeSource setup playbook
-      ansible.builtin.import_playbook: nodesource-setup.yml
+    - name: Import NodeSource setup tasks # Changed the name for clarity
+      ansible.builtin.import_tasks: nodesource-setup.yml
 
   roles:
   - configure-server
