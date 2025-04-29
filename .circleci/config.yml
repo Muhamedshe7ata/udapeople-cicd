@@ -237,17 +237,18 @@ jobs:
       - image: cimg/base:stable
     steps:
       - checkout
-      - install_ansible
+      
       - add_ssh_keys:
           fingerprints: [" SHA256:FJogcncZoAfN0hgvqhqDgAiiOafEii9G+HsAStU+Ok4"]
-      - attach_workspace:  
-          at: ~/
+      - run:
+          name: Insall dependencies
+          command: |
+            apk add --update ansible
 
       - run:
           name: Configure server
           command: |
-            cd .circleci/ansible
-           
+            
             ansible-playbook -i inventory.txt configure-server.yml
           
       # - destroy-environment:
