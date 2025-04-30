@@ -291,8 +291,7 @@ jobs:
           paths:
             - backend
 
-      - destroy-environment:
-          workflow_id: "${CIRCLE_WORKFLOW_ID}"   
+    
 
 #   deploy-frontend:
 #     docker:
