@@ -241,7 +241,7 @@ jobs:
       - run:
           name: prepare environment for backend build
           command: |
-            at \<\< EOF > backend/.env
+            cat \<\< EOF > backend/.env 
             ENVIRONMENT=production
             VERSION=1
             TYPEORM_CONNECTION=postgres
@@ -253,11 +253,8 @@ jobs:
             TYPEORM_USERNAME=${TYPEORM_USERNAME}
             TYPEORM_PASSWORD=${TYPEORM_PASSWORD}
             TYPEORM_DATABASE=${TYPEORM_DATABASE}
-            # --- ADD THESE LINES FOR SSL ---
-            # Ensure DB_SSL is true and NODE_TLS_REJECT_UNAUTHORIZED is 0 in CircleCI settings
             DB_SSL=${DB_SSL}
             NODE_TLS_REJECT_UNAUTHORIZED=${NODE_TLS_REJECT_UNAUTHORIZED}
-            # -----------------------------
             EOF
       - run:
           name: Install dependencies
