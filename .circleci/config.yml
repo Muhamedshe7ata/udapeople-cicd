@@ -232,23 +232,23 @@ jobs:
             - project/.circleci/ansible/inventory.txt
       - destroy-environment
 
-configure-infrastructure:
-  docker:
-    - image: cimg/base:stable # Or similar base image
-  steps:
-    - checkout
-    - install_ansible # This seems to be a custom or orb step
-    - add_ssh_keys:
-        fingerprints: ["<PEM Key Fingerprint>"] # Placeholder for your actual fingerprint
-    - attach_workspace:
-        at: ~/
-    - run:
-        name: Configure Server
-        command: |
-          cd .circleci/ansible
-          cat inventory.txt # This line was added to show the inventory content
-          ansible-playbook -i inventory.txt configure-server.yml
-    
+  configure-infrastructure:
+    docker:
+      - image: cimg/base:stable # Or similar base image
+    steps:
+      - checkout
+      - install_ansible # This seems to be a custom or orb step
+      - add_ssh_keys:
+          fingerprints: ["<PEM Key Fingerprint>"] # Placeholder for your actual fingerprint
+      - attach_workspace:
+          at: ~/
+      - run:
+          name: Configure Server
+          command: |
+            cd .circleci/ansible
+            cat inventory.txt # This line was added to show the inventory content
+            ansible-playbook -i inventory.txt configure-server.yml
+      
    
              
           
