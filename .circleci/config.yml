@@ -11,18 +11,25 @@ commands:
             sudo ./aws/install
 
   install_ansible:
-    description: Install Ansible v2
+    description: Install Ansible
     steps:
       - run:
-          name: Install Ansible v2
+          name: Install Ansible 
           command: |
             sudo apt update
-            sudo apt install software-properties-common
+            sudo apt install software-properties-common -y
             sudo add-apt-repository --yes --update ppa:ansible/ansible
-            sudo apt install ansible
+            sudo apt install ansible -y
 
-
- 
+  install_nodejs:
+    description: Install Node.js 13
+    steps:
+    - run:
+        name: Install Node.js 13
+        command: |
+          curl -fsSL https://deb.nodesource.com/setup_13.x | sudo -E bash -
+          sudo apt install -y nodejs
+   
 
   destroy-environment:
     description: Destroy back-end and front-end cloudformation stacks given a workflow ID.
@@ -231,84 +238,94 @@ jobs:
             cd .circleci/ansible
             cat inventory.txt # This line was added to show the inventory content
             ansible-playbook -i inventory.txt configure-server.yml
-  run-migrations:
-    docker:
-      - image:  cimg/node:13.8.0
-    steps:
-      - checkout
-      - restore_cache:
-          keys: [backend-build]
-      - run:
-          name: prepare environment for backend build
-          command: |
-            echo "ENVIRONMENT=production" > backend/.env
-            echo "VERSION=1" >> backend/.env
-            echo "TYPEORM_CONNECTION=postgres" >> backend/.env
-            echo "TYPEORM_MIGRATIONS_DIR=./src/migrations" >> backend/.env
-            echo "TYPEORM_ENTITIES=./src/modules/domain/**/*.entity.ts" >> backend/.env
-            echo "TYPEORM_MIGRATIONS=./src/migrations/*.ts" >> backend/.env
-            echo "TYPEORM_HOST=${TYPEORM_HOST}" >> backend/.env
-            echo "TYPEORM_PORT=${TYPEORM_PORT}" >> backend/.env
-            echo "TYPEORM_USERNAME=${TYPEORM_USERNAME}" >> backend/.env
-            echo "TYPEORM_PASSWORD=${TYPEORM_PASSWORD}" >> backend/.env
-            echo "TYPEORM_DATABASE=${TYPEORM_DATABASE}" >> backend/.env
-            echo "DB_SSL=${DB_SSL}" >> backend/.env
-            echo "NODE_TLS_REJECT_UNAUTHORIZED=${NODE_TLS_REJECT_UNAUTHORIZED}" >> backend/.env
-      - run:
-          name: Install dependencies
-          command: |
-            sudo apt update
-            sudo apt install -y awscli
-      - run:
-          name: Run migrations
-          command: |
-            cd backend
-            cat .env
-            npm i
-            npm run build
-            npm run migrations 2>&1 | tee migration-log.txt
+  # run-migrations:
+  #   docker:
+  #     - image:  cimg/node:13.8.0
+  #   steps:
+  #     - checkout
+  #     - restore_cache:
+  #         keys: [backend-build]
+  #     - run:
+  #         name: prepare environment for backend build
+  #         command: |
+  #           echo "ENVIRONMENT=production" > backend/.env
+  #           echo "VERSION=1" >> backend/.env
+  #           echo "TYPEORM_CONNECTION=postgres" >> backend/.env
+  #           echo "TYPEORM_MIGRATIONS_DIR=./src/migrations" >> backend/.env
+  #           echo "TYPEORM_ENTITIES=./src/modules/domain/**/*.entity.ts" >> backend/.env
+  #           echo "TYPEORM_MIGRATIONS=./src/migrations/*.ts" >> backend/.env
+  #           echo "TYPEORM_HOST=${TYPEORM_HOST}" >> backend/.env
+  #           echo "TYPEORM_PORT=${TYPEORM_PORT}" >> backend/.env
+  #           echo "TYPEORM_USERNAME=${TYPEORM_USERNAME}" >> backend/.env
+  #           echo "TYPEORM_PASSWORD=${TYPEORM_PASSWORD}" >> backend/.env
+  #           echo "TYPEORM_DATABASE=${TYPEORM_DATABASE}" >> backend/.env
+  #           echo "DB_SSL=${DB_SSL}" >> backend/.env
+  #           echo "NODE_TLS_REJECT_UNAUTHORIZED=${NODE_TLS_REJECT_UNAUTHORIZED}" >> backend/.env
+  #     - run:
+  #         name: Install dependencies
+  #         command: |
+  #           sudo apt update
+  #           sudo apt install -y awscli
+  #     - run:
+  #         name: Run migrations
+  #         command: |
+  #           cd backend
+  #           cat .env
+  #           npm i
+  #           npm run build
+  #           npm run migrations 2>&1 | tee migration-log.txt
 
-            status_code="${PIPESTATUS[0]}"
-            if [[ ! "${status_code}" == 0 ]]; then
-              return 1
-            fi
+  #           status_code="${PIPESTATUS[0]}"
+  #           if [[ ! "${status_code}" == 0 ]]; then
+  #             return 1
+  #           fi
 
-            if cat migration-log.txt | grep "has been executed successfully"; then
-              curl -H "Content-Type: text/plain" -H "token: ${CIRCLE_WORKFLOW_ID}" \
-                --request PUT --data "1" \
-                https://api.memstash.io/values/migration-"${CIRCLE_WORKFLOW_ID}"
-            fi
-      - persist_to_workspace:
-          root: ~/project
-          paths:
-            - backend  
+  #           if cat migration-log.txt | grep "has been executed successfully"; then
+  #             curl -H "Content-Type: text/plain" -H "token: ${CIRCLE_WORKFLOW_ID}" \
+  #               --request PUT --data "1" \
+  #               https://api.memstash.io/values/migration-"${CIRCLE_WORKFLOW_ID}"
+  #           fi
+  #     - persist_to_workspace:
+  #         root: ~/project
+  #         paths:
+  #           - backend  
    
              
           
     
 
 
-#   deploy-frontend:
-#     docker:
-#       # Docker image here that supports AWS CLI
-#     steps:
-#       # Checkout code from git
-#       - run:
-#           name: Install dependencies
-#           command: |
-#             # your code here
-#       - run:
-#           name: Get backend url
-#           command: |
-#             # your code here
-#             export API_URL="http://${BACKEND_IP}:3030"
-#             echo "${API_URL}"
-#       - run:
-#           name: Deploy frontend objects
-#           command: |
-#             # your code here
-#       # Here's where you will add some code to rollback on failure      
-                    
+  deploy-frontend:
+    docker: 
+    - image: cimg/base:stable
+    steps:
+      - checkout
+      - install_awscli
+      - install_nodejs
+      - restore_cache:
+          keys: [frontend-deps]
+      - run:
+          name: Install dependencies
+          command: |
+            cd frontend
+            npm install
+      - run:
+          name: Get backend url
+          command: |
+            BACKEND_PUBLIC_IP=$(aws ec2 describe-instances \
+              --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
+              --query 'Reservations[*].Instances[*].PublicIpAddress' \
+              --output text)
+
+            echo "API_URL=http://${BACKEND_PUBLIC_IP}:3030" >> frontend/.env
+            cat frontend/.env
+      - run:
+          name: Deploy frontend objects
+          command: |
+            cd frontend
+            npm run build
+            aws s3 cp dist s3://udapeople-${CIRCLE_WORKFLOW_ID:0:7} --recursive
+
 #   deploy-backend:
 #     docker:
 #       # Docker image here that supports Ansible
@@ -405,10 +422,10 @@ workflows:
               only: [master]
       - configure-infrastructure:
           requires: [deploy-infrastructure]
-      - run-migrations:
+      # - run-migrations:
+      #     requires: [configure-infrastructure]
+      - deploy-frontend:
           requires: [configure-infrastructure]
-      # - deploy-frontend:
-      #     requires: [run-migrations]
       # - deploy-backend:
       #     requires: [run-migrations]
       # - smoke-test:
