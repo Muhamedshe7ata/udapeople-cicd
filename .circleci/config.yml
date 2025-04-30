@@ -63,33 +63,16 @@ commands:
           name: Revert migrations
           when: on_fail
           command: |
-            SUCCESS=$(curl -s --insecure "https://kvdb.io/${KVDB_BUCKET}/migration_<< parameters.Workflow_ID >>")
-            echo "Migration status check for << parameters.Workflow_ID >> returned: '$SUCCESS'"
-            if [[ "$SUCCESS" == "1" ]]; then
-              echo "Success status (1) received. Reverting migration..."
-              if cd ~/project/backend; then
-                npm install
-                npm run migration:revert
-              else
-                echo "Error: Could not change directory to ~/project/backend"
-                exit 1
-              fi
-            else
-              echo "Revert not required or status check failed (Received: '$SUCCESS')."
+            SUCCESS=$(curl --insecure https://kvdb.io/${KVDB_BUCKET}/migration_ << parameters.Workflow_ID >>)
+            # Logic for reverting the database state
+            if (( $SUCCESS == 1 ));
+            then
+              cd ~/project/backend
+              npm install
+              npm run migration:revert
             fi
 
-# --- How to use this command in a job ---
-# jobs:
-#   build_and_deploy:
-#     docker:
-#       - image: cimg/node:18 # Choose appropriate image
-#     steps:
-#       - checkout
-#       - run: echo "Do some work that might fail..." # Potentially failing step
-#       # ... other steps ...
-#       - revert-migrations: # Use the command here
-#           # You can override the parameter if needed:
-#           # Workflow_ID: my-custom-id
+
             
 jobs:
   build-frontend:
@@ -255,26 +238,26 @@ jobs:
       # - destroy-environment:
       #     # workflow_id: "${CIRCLE_WORKFLOW_ID:0:7}"    
 
-  # run-migrations:
-  #   docker:
-  #     - image: cimg/node:13.8.0
+  run-migrations:
+    docker:
+      - image: cimg/node:13.8.0
 
-  #   steps:
-  #     - checkout
-  #     - install_awscli
-  #     - run:
-  #         name: Run migrations
-  #         command: |
-  #           cd backend
-  #           npm install
-  #           npm run migrations > migrations_dump.txt
-  #     - run:
-  #         name: Send migration status to kvdb.io
-  #         command: |
-  #           if grep -q "has been executed successfully." ~/project/backend/migrations_dump.txt
-  #           then
-  #             curl https://kvdb.io/${KVDB_BUCKET}/migration_${CIRCLE_WORKFLOW_ID:0:7} -d '1'
-  #           fi
+    steps:
+      - checkout
+      - install_awscli
+      - run:
+          name: Run migrations
+          command: |
+            cd backend
+            npm install
+            npm run migrations > migrations_dump.txt
+      - run:
+          name: Send migration status to kvdb.io
+          command: |
+            if grep -q "has been executed successfully." ~/project/backend/migrations_dump.txt
+            then
+              curl https://kvdb.io/${KVDB_BUCKET}/migration_${CIRCLE_WORKFLOW_ID:0:7} -d '1'
+            fi
       # - destroy-environment
       # - revert-migrations    
 
@@ -395,8 +378,8 @@ workflows:
               only: [master]
       - configure-infrastructure:
           requires: [deploy-infrastructure]
-      # - run-migrations:
-      #     requires: [configure-infrastructure]
+      - run-migrations:
+          requires: [configure-infrastructure]
       # - deploy-frontend:
       #     requires: [run-migrations]
       # - deploy-backend:
