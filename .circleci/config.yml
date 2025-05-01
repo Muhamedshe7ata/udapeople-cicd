@@ -48,11 +48,7 @@ commands:
             aws cloudformation delete-stack --stack-name udapeople-backend-<< parameters.Workflow_ID >> || echo "Failed to delete backend stack or stack does not exist."
             aws s3 rm s3://udapeople-<<parameters.Workflow_ID>> --recursive || echo "Failed to remove S3 bucket or bucket does not exist."
             aws cloudformation delete-stack --stack-name udapeople-frontend-<< parameters.Workflow_ID >> || echo "Failed to delete frontend stack or stack does not exist."
-      # --- REMOVE THE LINE BELOW ---
-      # - destroy-environment
 
-      # --- Consider if this persist step really belongs in the destroy command ---
-      # Usually, you persist data needed by *later* jobs. Destroy is often the *last* thing.
       - persist_to_workspace:
           root: ~/
           paths:
