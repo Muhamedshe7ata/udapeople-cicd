@@ -261,7 +261,7 @@ jobs:
             echo "TYPEORM_DATABASE=${TYPEORM_DATABASE}" >> backend/.env
             echo "DB_SSL=${DB_SSL}" >> backend/.env
             echo "NODE_TLS_REJECT_UNAUTHORIZED=${NODE_TLS_REJECT_UNAUTHORIZED}" >> backend/.env
-
+            echo "PGSSLMODE=require" >> backend/.env
       - run:
           name: Install dependencies
           command: |
@@ -272,33 +272,28 @@ jobs:
           command: |
             cd backend
             cat .env
-            npm i
+            npm ci
+            export $(grep -v '^#' .env | xargs)
             npm run build
-            # Use pipefail to ensure the step fails if npm run migrations fails
             set -o pipefail
             npm run migrations 2>&1 | tee migration-log.txt
-
-            # Check the exit status of the npm run migrations command
             status_code="${PIPESTATUS[0]}"
             if [[ "${status_code}" -ne 0 ]]; then
               echo "Migration failed with exit code ${status_code}"
               exit "${status_code}"
             fi
-
-            .
             if grep -q "has been executed successfully" migration-log.txt; then
-               # Use -s (silent) and -f (fail on error) for curl
                curl -s -f -H "Content-Type: text/plain" -H "token: ${CIRCLE_WORKFLOW_ID}" \
                  --request PUT --data "1" \
                  https://api.memstash.io/values/migration-"${CIRCLE_WORKFLOW_ID}" || {
                  echo "Warning: Reporting migration success failed."
-    
                }
             fi
       - persist_to_workspace:
           root: ~/project
           paths:
             - backend
+            
              
           
     
