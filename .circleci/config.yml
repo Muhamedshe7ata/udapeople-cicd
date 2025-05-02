@@ -78,10 +78,6 @@ commands:
               npm install
               npm run migration:revert
             fi
-            else
-              echo "No migrations executed successfully."
-            fi
-
 
             
 jobs:
