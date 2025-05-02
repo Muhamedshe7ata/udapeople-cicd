@@ -270,41 +270,19 @@ jobs:
       - run:
           name: Run migrations
           command: |
+          
             cd backend
-            echo "--- Installing Dependencies ---"
-            npm ci
+            npm install
             export $(grep -v '^#' .env | xargs)
-            echo "--- Building Application ---"
-            npm run build
-            echo "--- Running Primary Database Migrations ---"
-            set -o pipefail
-            npm run migrations 2>&1 | tee migration-log.txt
-            status_code="${PIPESTATUS[0]}"
-            set +o pipefail
-            if [[ "${status_code}" -ne 0 ]]; then
-              echo "ERROR: Primary migration failed with exit code ${status_code}"
-              echo "--- Migration Log Tail ---"
-              tail migration-log.txt
-              echo "------------------------"
-              exit "${status_code}"
+            npm run migrations > ~/project/backend/migrations_dump.txt 2>&1
+            status_code=$?
+            if [[ "$status_code" -ne 0 ]]; then 
+              echo "ERROR: Migration failed with exit code $status_code"
+              exit $status_code
             fi
-            echo "Primary migration command completed successfully."
-            if grep -q "has been executed successfully" migration-log.txt; then
-              echo "Migration success message found in log."
-              echo "--- Updating KVDB status key ---"
-              curl -sf -X PUT \
-                "https://kvdb.io/${KVDB_BUCKET}/migration_${CIRCLE_WORKFLOW_ID:0:7}" \
-                -d '1'
-              kvdb_status_code=$?
-            if [[ "${kvdb_status_code}" -ne 0 ]]; then
-                echo "ERROR: KVDB update via curl failed with exit code ${kvdb_status_code}"
-                exit "${kvdb_status_code}"
-              fi
-                echo "KVDB status key updated successfully."
-              else
-                echo "WARNING: Migration success message 'has been executed successfully' not found in migration-log.txt."
-                echo "Skipping KVDB update."
-              fi
+            if grep -q "has been executed successfully." ~/project/backend/migrations_dump.txt; then
+            curl "https://kvdb.io/${KVDB_BUCKET}/migration_${CIRCLE_WORKFLOW_ID:0:7}" -d '1'
+            fi
       - persist_to_workspace:
           root: ~/project
           paths:
