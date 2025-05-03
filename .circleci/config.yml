@@ -369,32 +369,33 @@ jobs:
             cd backend
             npm install
       - run:
-          name: Package Backend
+         name: Install backend dependencies
+         command: |
+          cd backend
+          npm install
+          name: Package backend
           command: |
             cd backend
             npm run build
-            tar -czf artifact.tar.gz dist/* package*
-            cd ..
-            cp backend/artifact.tar.gz .circleci/ansible/roles/deploy/files
-                command: |
-            echo "Getting Backend IP Address for Deployment..."
-            BACKEND_PUBLIC_IP=$(aws ec2 describe-instances \
-              --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
-              --query 'Reservations[*].Instances[*].PublicIpAddress' \
-              --output text)
+            tar -czvf artifact.tar.gz dist/* package*
 
-            if [ -z "$BACKEND_PUBLIC_IP" ]; then
-              echo "ERROR: Failed to get BACKEND_PUBLIC_IP from AWS for deployment."
-              exit 1
-            fi
-            echo "Deploying to Backend IP: $BACKEND_PUBLIC_IP"
+            cd .. 
+            cp backend/artifact.tar.gz .circleci/ansible/roles/deploy/files
+            
+      - run:
+          name: Deploy backend
+          command: |
+            export TYPEORM_MIGRATIONS_DIR=./migrations
+            export TYPEORM_ENTITIES=./modules/domain/**/*.entity{.ts,.js}
+            export TYPEORM_MIGRATIONS=./migrations/*.ts
 
             cd .circleci/ansible
-
-            ansible-playbook \
-              -i "${BACKEND_PUBLIC_IP}," \
-              --extra-vars "ansible_user=ubuntu ansible_python_interpreter=/usr/bin/python3" \
-              deploy-backend.yml
+            echo "Contents  of the inventory file is -------"
+            cat inventory.txt
+            ansible-playbook -i inventory.txt deploy-backend.yml
+            
+      - destroy-environment   
+      - revert-migrations 
 
   smoke-test:
      docker:
