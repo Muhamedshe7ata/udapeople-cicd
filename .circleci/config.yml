@@ -376,63 +376,64 @@ jobs:
             tar -czf artifact.tar.gz dist/* package*
             cd ..
             cp backend/artifact.tar.gz .circleci/ansible/roles/deploy/files
-      - run:
-          name: Deploy backend
-          command: |
-            export TYPEORM_MIGRATIONS_DIR=./migrations
-            export TYPEORM_ENTITIES=./modules/domain/**/*.entity{.ts,.js}
-            export TYPEORM_MIGRATIONS=./migrations/*.ts
+                command: |
+            echo "Getting Backend IP Address for Deployment..."
+            BACKEND_PUBLIC_IP=$(aws ec2 describe-instances \
+              --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
+              --query 'Reservations[*].Instances[*].PublicIpAddress' \
+              --output text)
+
+            if [ -z "$BACKEND_PUBLIC_IP" ]; then
+              echo "ERROR: Failed to get BACKEND_PUBLIC_IP from AWS for deployment."
+              exit 1
+            fi
+            echo "Deploying to Backend IP: $BACKEND_PUBLIC_IP"
+
             cd .circleci/ansible
-            cat inventory.txt
-            ansible-playbook -i inventory.txt deploy-backend.yml
-      - destroy-environment
-      - revert-migrations
+
+            ansible-playbook \
+              -i "${BACKEND_PUBLIC_IP}," \
+              --extra-vars "ansible_user=ubuntu ansible_python_interpreter=/usr/bin/python3" \
+              deploy-backend.yml
 
   smoke-test:
-    docker:
-      - image: cimg/base:stable
-    steps:
+     docker:
+       - image: cimg/base:stable
+     steps:
       - checkout
       - install_awscli
       - install_nodejs
       - run:
-   
+          name: Backend smoke test.
           command: |
-              echo "Attempting to get Backend IP..."
-              BACKEND_PUBLIC_IP=$(aws ec2 describe-instances \
-                --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
-                --query 'Reservations[*].Instances[*].PublicIpAddress' \
-                --output text)
+            BACKEND_PUBLIC_IP=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
+            --query 'Reservations[*].Instances[*].PublicIpAddress' \
+            --output text)
 
-              if [ -z "$BACKEND_PUBLIC_IP" ]; then
-                echo "ERROR: Failed to get BACKEND_PUBLIC_IP from AWS."
-                exit 1
-              fi
-              echo "BACKEND_PUBLIC_IP=$BACKEND_PUBLIC_IP"
+            export API_URL=http://${BACKEND_PUBLIC_IP}:3030
 
-              # Define the full URL here for clarity in logs
-              API_ENDPOINT="http://${BACKEND_PUBLIC_IP}:3030/api/status"
-              echo "API_ENDPOINT=$API_ENDPOINT"
+            if curl -sf $API_URL/api/status | grep -q "ok"
+            then
+            echo "Backend smoke test passed."
+            exit 0
+            else
+            echo "Backend smoke test failed."
+            exit 1
+            fi
+      - run:
+          name: Frontend smoke test.
+          command: |
+            FRONTEND_WEBSITE=http://udapeople-${CIRCLE_WORKFLOW_ID:0:7}.s3-website.${AWS_DEFAULT_REGION}.amazonaws.com
 
-              echo "Running curl command..."
-              
-              curl_output=$(curl -v --connect-timeout 10 --max-time 20 $API_ENDPOINT)
-              curl_exit_code=$?
-
-              echo "Curl Exit Code: $curl_exit_code"
-              echo "Curl Output:"
-              echo "$curl_output"
-              echo "--- End Curl Output ---"
-
-              # Check the results based on captured data
-              if [ $curl_exit_code -eq 0 ] && echo "$curl_output" | grep -q "ok"; then
-                echo "Backend smoke test passed."
-                exit 0
-              else
-                echo "Backend smoke test failed. Check curl output and exit code above."
-                exit 1
-              fi
-
+            if curl -sf $FRONTEND_WEBSITE | grep -q "Welcome"
+            then
+            echo "Frontend smoke test passed."
+            exit 0
+            else
+            echo "Frontend smoke test failed."
+            exit 1
+            fi
 
 #   cloudfront-update:
 #     docker:
