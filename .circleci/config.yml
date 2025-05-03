@@ -270,35 +270,42 @@ jobs:
             sudo apt install -y awscli curl
             
       - run:
-          name: Run Migrations and Update KVDB Status
+          name: Run migrations
           command: |
-            #!/bin/bash -eo pipefail
             cd backend
             npm ci
-            export $(grep -v '^#' .env | xargs)
+            if [ -f .env ]; then
+              export $(grep -v '^#' .env | xargs)
+            fi
+            if [ -z "${KVDB_BUCKET}" ]; then
+              echo "ERROR: KVDB_BUCKET environment variable is not set. Cannot update KVDB."
+              exit 1
+            fi
             npm run migrations > ./migrations_dump.txt 2>&1
             migration_status_code=$?
             cat ./migrations_dump.txt
             if [[ "${migration_status_code}" -ne 0 ]]; then
-              echo "ERROR: 'npm run migrations' failed with exit code ${migration_status_code}."
+              echo "ERROR: 'npm run migrations' command failed with exit code ${migration_status_code}."
               exit "${migration_status_code}"
             fi
-            echo "Migration command completed successfully (exit code 0)."
-            if grep -q "has been executed successfully." ./migrations_dump.txt; then
-              echo "Migration success message found in log."
+            echo "Migration command completed successfully (exit code 0). Checking output for success messages..."
+            if grep -E -q "has been executed successfully.|No migrations are pending" ./migrations_dump.txt; then
+              echo "Found expected success message ('migration executed' or 'no migrations pending') in log."
               echo "--- Updating KVDB status key ---"
               curl -sf -X PUT \
                 "https://kvdb.io/${KVDB_BUCKET}/migration_${CIRCLE_WORKFLOW_ID:0:7}" \
                 -d '1' || {
-                  echo "ERROR: curl command failed to update kvdb.io (HTTP error or network issue)."
                   curl_exit_code=$?
+                  echo "ERROR: curl command failed to update kvdb.io with exit code ${curl_exit_code}."
+                  echo "Check network connectivity, KVDB_BUCKET value ('${KVDB_BUCKET}'), and kvdb.io service status."
                   exit $curl_exit_code
                 }
               echo "KVDB status updated successfully via curl."
             else
-              echo "WARNING: Migration command succeeded, but success message not found in ./migrations_dump.txt."
-              echo "Skipping KVDB update."
+              echo "WARNING: Migration command succeeded (exit code 0), but NEITHER 'has been executed successfully.' NOR 'No migrations are pending' was found in the output."
+              echo "Skipping KVDB update due to unrecognized success output."
             fi
+            echo "Migration and KVDB update check process finished successfully."
       - destroy-environment
       - revert-migrations
 
