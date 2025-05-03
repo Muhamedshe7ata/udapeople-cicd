@@ -186,7 +186,12 @@ jobs:
       - image: cimg/base:stable
     steps:
       - checkout
-      - install_awscli
+      - run:
+          name: Install AWS CLI
+          command: |
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip awscliv2.zip
+            sudo ./aws/install
       - run:
           name: Ensure back-end infrastructure exists
           command: |
@@ -313,53 +318,75 @@ jobs:
              
         
 
-  # deploy-frontend:
-  #   docker: 
-  #   - image: cimg/base:stable
-  #   steps:
-  #     - checkout
-  #     - install_awscli
-  #     - install_nodejs
-  #     - restore_cache:
-  #         keys: [frontend-deps]
-  #     - run:
-  #         name: Install dependencies
-  #         command: |
-  #           cd frontend
-  #           npm install
-  #     - run:
-  #         name: Get backend url
-  #         command: |
-  #           BACKEND_PUBLIC_IP=$(aws ec2 describe-instances \
-  #             --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
-  #             --query 'Reservations[*].Instances[*].PublicIpAddress' \
-  #             --output text)
+  deploy-frontend:
+    docker: 
+    - image: cimg/base:stable
+    steps:
+      - checkout
+      - install_awscli
+      - install_nodejs
+      - restore_cache:
+          keys: [frontend-deps]
+      - run:
+          name: Install dependencies
+          command: |
+            cd frontend
+            npm install
+      - run:
+          name: Get backend url
+          command: |
+            BACKEND_PUBLIC_IP=$(aws ec2 describe-instances \
+              --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
+              --query 'Reservations[*].Instances[*].PublicIpAddress' \
+              --output text)
 
-  #           echo "API_URL=http://${BACKEND_PUBLIC_IP}:3030" >> frontend/.env
-  #           cat frontend/.env
-  #     - run:
-  #         name: Deploy frontend objects
-  #         command: |
-  #           cd frontend
-  #           npm run build
-  #           aws s3 cp dist s3://udapeople-${CIRCLE_WORKFLOW_ID:0:7} --recursive
+            echo "API_URL=http://${BACKEND_PUBLIC_IP}:3030" >> frontend/.env
+            cat frontend/.env
+      - run:
+          name: Deploy frontend objects
+          command: |
+            cd frontend
+            npm run build
+            aws s3 cp dist s3://udapeople-${CIRCLE_WORKFLOW_ID:0:7} --recursive
 
-  # deploy-backend:
-#     docker:
-#       # Docker image here that supports Ansible
-#     steps:
-#       # Checkout code from git
-#       # Add ssh keys with fingerprint
-#       # attach workspace
-#       - run:
-#           name: Install dependencies
-#           command: |
-#             # your code here
-#       - run:
-#           name: Deploy backend
-#           command: |
-#             # your code here
-#       # Here's where you will add some code to rollback on failure  
+  deploy-backend:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - checkout
+      - install_awscli
+      - install_ansible
+      - install_nodejs
+      - add_ssh_keys:
+          fingerprints: ["SHA256:FJogcncZoAfN0hgvqhqDgAiiOafEii9G+HsAStU+Ok4"]
+      - attach_workspace:
+          at: ~/
+      - restore_cache:
+          keys: [backend-deps]
+      - run:
+          name: Install dependencies
+          command: |
+            cd backend
+            npm install
+      - run:
+          name: Package Backend
+          command: |
+            cd backend
+            npm run build
+            tar -czf artifact.tar.gz dist/* package*
+            cd ..
+            cp backend/artifact.tar.gz .circleci/ansible/roles/deploy/files
+      - run:
+          name: Deploy backend
+          command: |
+            export TYPEORM_MIGRATIONS_DIR=./migrations
+            export TYPEORM_ENTITIES=./modules/domain/**/*.entity{.ts,.js}
+            export TYPEORM_MIGRATIONS=./migrations/*.ts
+            cd .circleci/ansible
+            cat inventory.txt
+            ansible-playbook -i inventory.txt deploy-backend.yml
+      - destroy-environment
+      - revert-migrations
 
 #   smoke-test:
 #     docker:
@@ -424,10 +451,10 @@ workflows:
           requires: [deploy-infrastructure]
       - run-migrations:
           requires: [configure-infrastructure]
-      # - deploy-frontend:
-      #     requires: [run-migrations]
-      # - deploy-backend:
-      #     requires: [run-migrations]
+      - deploy-frontend:
+          requires: [run-migrations]
+      - deploy-backend:
+          requires: [run-migrations]
       # - smoke-test:
       #     requires: [deploy-backend, deploy-frontend]
       # - cloudfront-update:
