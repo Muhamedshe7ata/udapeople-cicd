@@ -349,37 +349,40 @@ jobs:
             npm run build
             aws s3 cp dist s3://udapeople-${CIRCLE_WORKFLOW_ID:0:7} --recursive
 
-  # From input_file_0.png
-deploy-backend:
-  docker:
-    - image: cimg/base:stable
-  steps:
-    - checkout
-    - install_awscli
-    - install_ansible
-    - install_nodejs
-    - add_ssh_keys:
-        fingerprints: [" SHA256:FJogcncZoAfN0hgvqhqDgAiiOafEii9G+HsAStU+Ok4"]
-    - attach_workspace:
-        at: ~/
-    - restore_cache:
-        keys: [backend-deps]
-    - run:
-        name: Install dependencies
-        command: |
-          cd backend
-          npm install
-    - run:
-        name: Deploy backend
-        command: |
-          # From input_file_1.png (continuation of command)
-          export TYPEORM_MIGRATIONS_DIR=./migrations
-          export TYPEORM_ENTITIES=./modules/domain/**/*.entity{.ts,.js}
-          export TYPEORM_MIGRATIONS=./migrations/*.ts
+  
+  deploy-backend:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - checkout
+      - install_awscli
+      - install_ansible
+      - install_nodejs
+      - add_ssh_keys:
+          fingerprints: [" SHA256:FJogcncZoAfN0hgvqhqDgAiiOafEii9G+HsAStU+Ok4"]
+      - attach_workspace:
+          at: ~/
+      - restore_cache:
+          keys: [backend-deps]
+      - run:
+          name: Install dependencies
+          command: |
+            cd backend
+            npm install
+      - run:
+          name: Deploy backend
+          command: |
+            # From input_file_1.png (continuation of command)
+            export TYPEORM_MIGRATIONS_DIR=./migrations
+            export TYPEORM_ENTITIES=./modules/domain/**/*.entity{.ts,.js}
+            export TYPEORM_MIGRATIONS=./migrations/*.ts
 
-          cd .circleci/ansible
-          cat inventory.txt
-          ansible-playbook -i inventory.txt deploy-backend.yml
+            cd .circleci/ansible
+            cat inventory.txt
+            ansible-playbook -i inventory.txt deploy-backend.yml
+
+      - destroy-environment
+      - revert-migrations
 
 # From input_file_1.png (separate steps/jobs)
     #  - destroy-environment
