@@ -1,80 +1,80 @@
-# ---
-# - name: "Creates backend app directory"
-#   file:
-#     path: ~/backend-app
-#     state: directory
-
-# - name: "Unarchive backend files"
-#   unarchive:
-#     src: artifact.tar.gz
-#     dest: ~/backend-app
-
-# - name: "Installing Node Dependencies"
-#   shell: |
-#     cd ~/backend-app
-#     npm i
-
-# - name: "Executing Node app with PM2"
-#   shell: |
-#     cd ~/backend-app/dist
-#     pm2 stop default
-#     pm2 start main.js
-#   register: execute_node
-
-# - name: print message
-#   debug:
-#     msg: "{{ execute_node.stdout_lines }}"
-
-# - name: "Configure pm2 to start as service"
-#   become: true
-#   shell: |
-#     env PATH=$PATH:/usr/local/bin pm2 startup systemd -u ubuntu --hp /home/ubuntu
-
 ---
 - name: "Creates backend app directory"
   file:
-    path: /home/ubuntu/backend-app
+    path: ~/backend-app
     state: directory
-    owner: ubuntu
-    group: ubuntu
 
 - name: "Unarchive backend files"
   unarchive:
     src: artifact.tar.gz
-    dest: /home/ubuntu/backend-app
-    owner: ubuntu
-    group: ubuntu
+    dest: ~/backend-app
 
-- name: "Installing Node Production Dependencies"
-  shell: npm ci
-  args:
-    chdir: /home/ubuntu/backend-app
-  environment:
-     NODE_ENV: production
+- name: "Installing Node Dependencies"
+  shell: |
+    cd ~/backend-app
+    npm i
 
-- name: "Ensure Node app is running with PM2"
-  shell: pm2 startOrRestart main.js --name backend-app --env production
-  args:
-    chdir: /home/ubuntu/backend-app/dist
+- name: "Executing Node app with PM2"
+  shell: |
+    cd ~/backend-app/src
+    pm2 stop default
+    pm2 start main.js
   register: execute_node
-  environment:
-     NODE_ENV: production
 
-- name: "Print PM2 execution message"
+- name: print message
   debug:
     msg: "{{ execute_node.stdout_lines }}"
-  when: execute_node is defined
 
-- name: "Configure PM2 to start on boot for user ubuntu"
+- name: "Configure pm2 to start as service"
   become: true
-  shell: env PATH=$PATH:/usr/local/bin pm2 startup systemd -u ubuntu --hp /home/ubuntu
-  register: pm2_startup_output
-  changed_when: "'systemd already setup' not in pm2_startup_output.stdout"
+  shell: |
+    env PATH=$PATH:/usr/local/bin pm2 startup systemd -u ubuntu --hp /home/ubuntu
 
-- name: "Save current PM2 process list for startup"
-  shell: pm2 save
-  args:
-    chdir: /home/ubuntu/backend-app
-  become: false
-  register: pm2_save_output
-  changed_when: "'successfully saved' in pm2_save_output.stdout"
+# ---
+# - name: "Creates backend app directory"
+#   file:
+#     path: /home/ubuntu/backend-app
+#     state: directory
+#     owner: ubuntu
+#     group: ubuntu
+
+# - name: "Unarchive backend files"
+#   unarchive:
+#     src: artifact.tar.gz
+#     dest: /home/ubuntu/backend-app
+#     owner: ubuntu
+#     group: ubuntu
+
+# - name: "Installing Node Production Dependencies"
+#   shell: npm ci
+#   args:
+#     chdir: /home/ubuntu/backend-app
+#   environment:
+#      NODE_ENV: production
+
+# - name: "Ensure Node app is running with PM2"
+#   shell: pm2 startOrRestart main.js --name backend-app --env production
+#   args:
+#     chdir: /home/ubuntu/backend-app/dist
+#   register: execute_node
+#   environment:
+#      NODE_ENV: production
+
+# - name: "Print PM2 execution message"
+#   debug:
+#     msg: "{{ execute_node.stdout_lines }}"
+#   when: execute_node is defined
+
+# - name: "Configure PM2 to start on boot for user ubuntu"
+#   become: true
+#   shell: env PATH=$PATH:/usr/local/bin pm2 startup systemd -u ubuntu --hp /home/ubuntu
+#   register: pm2_startup_output
+#   changed_when: "'systemd already setup' not in pm2_startup_output.stdout"
+
+# - name: "Save current PM2 process list for startup"
+#   shell: pm2 save
+#   args:
+#     chdir: /home/ubuntu/backend-app
+#   become: false
+#   register: pm2_save_output
+#   changed_when: "'successfully saved' in pm2_save_output.stdout"
