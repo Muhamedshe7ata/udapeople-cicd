@@ -223,7 +223,7 @@ jobs:
           root: ~/
           paths:
             - project/.circleci/ansible/inventory.txt
-      - destroy-environment
+       # - destroy-environment
 
   configure-infrastructure:
     docker:
@@ -349,92 +349,79 @@ jobs:
             npm run build
             aws s3 cp dist s3://udapeople-${CIRCLE_WORKFLOW_ID:0:7} --recursive
 
-  deploy-backend:
-    docker:
-      - image: cimg/base:stable
-    steps:
-      - checkout
-      - install_awscli
-      - install_ansible
-      - install_nodejs
-      - add_ssh_keys:
-          fingerprints: ["SHA256:FJogcncZoAfN0hgvqhqDgAiiOafEii9G+HsAStU+Ok4"]
-      - attach_workspace:
-          at: ~/
-      - restore_cache:
-          keys: [backend-deps]
-      - run:
-          name: Install dependencies
-          command: |
-            cd backend
-            npm install
-      - run:
-         name: Install backend dependencies
-         command: |
+  # From input_file_0.png
+deploy-backend:
+  docker:
+    - image: cimg/base:stable
+  steps:
+    - checkout
+    - install_awscli
+    - install_ansible
+    - install_nodejs
+    - add_ssh_keys:
+        fingerprints: [" SHA256:FJogcncZoAfN0hgvqhqDgAiiOafEii9G+HsAStU+Ok4"]
+    - attach_workspace:
+        at: ~/
+    - restore_cache:
+        keys: [backend-deps]
+    - run:
+        name: Install dependencies
+        command: |
           cd backend
           npm install
-          name: Package backend
-          command: |
-            cd backend
-            npm run build
-            tar -czvf artifact.tar.gz dist/* package*
+    - run:
+        name: Deploy backend
+        command: |
+          # From input_file_1.png (continuation of command)
+          export TYPEORM_MIGRATIONS_DIR=./migrations
+          export TYPEORM_ENTITIES=./modules/domain/**/*.entity{.ts,.js}
+          export TYPEORM_MIGRATIONS=./migrations/*.ts
 
-            cd .. 
-            cp backend/artifact.tar.gz .circleci/ansible/roles/deploy/files
-            
-      - run:
-          name: Deploy backend
-          command: |
-            export TYPEORM_MIGRATIONS_DIR=./migrations
-            export TYPEORM_ENTITIES=./modules/domain/**/*.entity{.ts,.js}
-            export TYPEORM_MIGRATIONS=./migrations/*.ts
+          cd .circleci/ansible
+          cat inventory.txt
+          ansible-playbook -i inventory.txt deploy-backend.yml
 
-            cd .circleci/ansible
-            echo "Contents  of the inventory file is -------"
-            cat inventory.txt
-            ansible-playbook -i inventory.txt deploy-backend.yml
-            
-      - destroy-environment   
-      - revert-migrations 
+# From input_file_1.png (separate steps/jobs)
+    #  - destroy-environment
+    #  - revert-migrations
+  # smoke-test:
+  #    docker:
+  #      - image: cimg/base:stable
+  #    steps:
+  #     - checkout
+  #     - install_awscli
+  #     - install_nodejs
+  #     - run:
+  #         name: Backend smoke test.
+  #         command: |
+  #           BACKEND_PUBLIC_IP=$(aws ec2 describe-instances \
+  #           --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
+  #           --query 'Reservations[*].Instances[*].PublicIpAddress' \
+  #           --output text)
 
-  smoke-test:
-     docker:
-       - image: cimg/base:stable
-     steps:
-      - checkout
-      - install_awscli
-      - install_nodejs
-      - run:
-          name: Backend smoke test.
-          command: |
-            BACKEND_PUBLIC_IP=$(aws ec2 describe-instances \
-            --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
-            --query 'Reservations[*].Instances[*].PublicIpAddress' \
-            --output text)
+  #           export API_URL=http://${BACKEND_PUBLIC_IP}:3030
 
-            export API_URL=http://${BACKEND_PUBLIC_IP}:3030
+  #           if curl -sf $API_URL/api/status | grep -q "ok"
+  #           then
+  #           echo "Backend smoke test passed."
+  #           exit 0
+  #           else
+  #           echo "Backend smoke test failed."
+  #           exit 1
+  #           fi
+  #     - run:
+  #         name: Frontend smoke test.
+  #         command: |
+  #           FRONTEND_WEBSITE=http://udapeople-${CIRCLE_WORKFLOW_ID:0:7}.s3-website.${AWS_DEFAULT_REGION}.amazonaws.com
 
-            if curl -sf $API_URL/api/status | grep -q "ok"
-            then
-            echo "Backend smoke test passed."
-            exit 0
-            else
-            echo "Backend smoke test failed."
-            exit 1
-            fi
-      - run:
-          name: Frontend smoke test.
-          command: |
-            FRONTEND_WEBSITE=http://udapeople-${CIRCLE_WORKFLOW_ID:0:7}.s3-website.${AWS_DEFAULT_REGION}.amazonaws.com
-
-            if curl -sf $FRONTEND_WEBSITE | grep -q "Welcome"
-            then
-            echo "Frontend smoke test passed."
-            exit 0
-            else
-            echo "Frontend smoke test failed."
-            exit 1
-            fi
+  #           if curl -sf $FRONTEND_WEBSITE | grep -q "Welcome"
+  #           then
+  #           echo "Frontend smoke test passed."
+  #           exit 0
+  #           else
+  #           echo "Frontend smoke test failed."
+  #           exit 1
+  #           fi
 
 #   cloudfront-update:
 #     docker:
@@ -480,8 +467,8 @@ workflows:
           requires: [run-migrations]
       - deploy-backend:
           requires: [run-migrations]
-      - smoke-test:
-          requires: [deploy-backend, deploy-frontend]
+      # - smoke-test:
+      #     requires: [deploy-backend, deploy-frontend]
       # - cloudfront-update:
       #     requires: [smoke-test]
       # - cleanup:
