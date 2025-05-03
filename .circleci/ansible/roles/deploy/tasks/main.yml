@@ -33,56 +33,48 @@
 ---
 - name: "Creates backend app directory"
   file:
-    path: /home/ubuntu/backend-app # Use full path for clarity
+    path: /home/ubuntu/backend-app
     state: directory
-    owner: ubuntu # Explicit ownership
-    group: ubuntu # Explicit group
+    owner: ubuntu
+    group: ubuntu
 
 - name: "Unarchive backend files"
   unarchive:
-    src: artifact.tar.gz # Assumes this is in roles/deploy/files/
+    src: artifact.tar.gz
     dest: /home/ubuntu/backend-app
     owner: ubuntu
     group: ubuntu
 
 - name: "Installing Node Production Dependencies"
-  # Option 1: Using npm ci (recommended if you have package-lock.json)
   shell: npm ci
   args:
     chdir: /home/ubuntu/backend-app
-  environment: # Ensure NODE_ENV is set if install scripts need it
+  environment:
      NODE_ENV: production
-  # Option 2: Using npm install --production
-  # npm:
-  #   path: /home/ubuntu/backend-app
-  #   production: yes # Installs only production dependencies
-  #   ci: yes # Use if you prefer npm ci via the module
 
 - name: "Ensure Node app is running with PM2"
-  # Assumes you have an ecosystem.config.js in ~/backend-app/
-  # Or replace ecosystem.config.js with main.js --name backend-app if not using an ecosystem file
-  shell: pm2 startOrRestart ecosystem.config.js --env production # Use startOrRestart or reload/gracefulReload
+  shell: pm2 startOrRestart main.js --name backend-app --env production
   args:
-    chdir: /home/ubuntu/backend-app # Run from the app root
+    chdir: /home/ubuntu/backend-app/dist
   register: execute_node
-  environment: # Pass necessary env vars if not using ecosystem file
+  environment:
      NODE_ENV: production
-     # Add other required env vars like database connection etc. if not managed by PM2 ecosystem file
 
 - name: "Print PM2 execution message"
   debug:
     msg: "{{ execute_node.stdout_lines }}"
-  when: execute_node is defined # Only print if the task ran
+  when: execute_node is defined
 
-- name: "Configure PM2 to start on boot"
-  become: true # Run as root
+- name: "Configure PM2 to start on boot for user ubuntu"
+  become: true
   shell: env PATH=$PATH:/usr/local/bin pm2 startup systemd -u ubuntu --hp /home/ubuntu
-  # This command generates/updates the systemd unit file and attempts to enable it.
-  # It's generally safe to run multiple times.
+  register: pm2_startup_output
+  changed_when: "'systemd already setup' not in pm2_startup_output.stdout"
 
 - name: "Save current PM2 process list for startup"
   shell: pm2 save
   args:
-    chdir: /home/ubuntu/backend-app # Good practice to run from app dir, though not strictly required for save
-  become: false # IMPORTANT: Must run as the user who runs the app (ubuntu)
-  # If running Ansible as root initially, you might need become_user: ubuntu
+    chdir: /home/ubuntu/backend-app
+  become: false
+  register: pm2_save_output
+  changed_when: "'successfully saved' in pm2_save_output.stdout"
