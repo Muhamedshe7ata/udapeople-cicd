@@ -1,31 +1,88 @@
+# ---
+# - name: "Creates backend app directory"
+#   file:
+#     path: ~/backend-app
+#     state: directory
+
+# - name: "Unarchive backend files"
+#   unarchive:
+#     src: artifact.tar.gz
+#     dest: ~/backend-app
+
+# - name: "Installing Node Dependencies"
+#   shell: |
+#     cd ~/backend-app
+#     npm i
+
+# - name: "Executing Node app with PM2"
+#   shell: |
+#     cd ~/backend-app/dist
+#     pm2 stop default
+#     pm2 start main.js
+#   register: execute_node
+
+# - name: print message
+#   debug:
+#     msg: "{{ execute_node.stdout_lines }}"
+
+# - name: "Configure pm2 to start as service"
+#   become: true
+#   shell: |
+#     env PATH=$PATH:/usr/local/bin pm2 startup systemd -u ubuntu --hp /home/ubuntu
+
 ---
 - name: "Creates backend app directory"
   file:
-    path: ~/backend-app
+    path: /home/ubuntu/backend-app # Use full path for clarity
     state: directory
+    owner: ubuntu # Explicit ownership
+    group: ubuntu # Explicit group
 
 - name: "Unarchive backend files"
   unarchive:
-    src: artifact.tar.gz
-    dest: ~/backend-app
+    src: artifact.tar.gz # Assumes this is in roles/deploy/files/
+    dest: /home/ubuntu/backend-app
+    owner: ubuntu
+    group: ubuntu
 
-- name: "Installing Node Dependencies"
-  shell: |
-    cd ~/backend-app
-    npm i
+- name: "Installing Node Production Dependencies"
+  # Option 1: Using npm ci (recommended if you have package-lock.json)
+  shell: npm ci
+  args:
+    chdir: /home/ubuntu/backend-app
+  environment: # Ensure NODE_ENV is set if install scripts need it
+     NODE_ENV: production
+  # Option 2: Using npm install --production
+  # npm:
+  #   path: /home/ubuntu/backend-app
+  #   production: yes # Installs only production dependencies
+  #   ci: yes # Use if you prefer npm ci via the module
 
-- name: "Executing Node app with PM2"
-  shell: |
-    cd ~/backend-app/dist
-    pm2 stop default
-    pm2 start main.js
+- name: "Ensure Node app is running with PM2"
+  # Assumes you have an ecosystem.config.js in ~/backend-app/
+  # Or replace ecosystem.config.js with main.js --name backend-app if not using an ecosystem file
+  shell: pm2 startOrRestart ecosystem.config.js --env production # Use startOrRestart or reload/gracefulReload
+  args:
+    chdir: /home/ubuntu/backend-app # Run from the app root
   register: execute_node
+  environment: # Pass necessary env vars if not using ecosystem file
+     NODE_ENV: production
+     # Add other required env vars like database connection etc. if not managed by PM2 ecosystem file
 
-- name: print message
+- name: "Print PM2 execution message"
   debug:
     msg: "{{ execute_node.stdout_lines }}"
+  when: execute_node is defined # Only print if the task ran
 
-- name: "Configure pm2 to start as service"
-  become: true
-  shell: |
-    env PATH=$PATH:/usr/local/bin pm2 startup systemd -u ubuntu --hp /home/ubuntu
+- name: "Configure PM2 to start on boot"
+  become: true # Run as root
+  shell: env PATH=$PATH:/usr/local/bin pm2 startup systemd -u ubuntu --hp /home/ubuntu
+  # This command generates/updates the systemd unit file and attempts to enable it.
+  # It's generally safe to run multiple times.
+
+- name: "Save current PM2 process list for startup"
+  shell: pm2 save
+  args:
+    chdir: /home/ubuntu/backend-app # Good practice to run from app dir, though not strictly required for save
+  become: false # IMPORTANT: Must run as the user who runs the app (ubuntu)
+  # If running Ansible as root initially, you might need become_user: ubuntu
