@@ -231,18 +231,14 @@ jobs:
               --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
               --query 'Reservations[*].Instances[*].PublicIpAddress' \
               --output text)
-            # INSTEAD OF THIS:
-            # echo $BACKEND_PUBLIC_IP >> .circleci/ansible/inventory.txt
-            # cat .circleci/ansible/inventory.txt
+         
 
-            # DO THIS:
-            # Ensure the directory exists
+           
             mkdir -p .circleci/ansible
-            # Create the file with the header (overwrite if exists)
-            echo "[web]" > .circleci/ansible/inventory.txt
-            # Append the IP address (use >> here, as the file now definitely exists)
-            echo "${BACKEND_PUBLIC_IP} ansible_user=ubuntu" >> .circleci/ansible/inventory.txt #<-- Add ansible_user if needed! Adjust 'ubuntu' if necessary.
-            # Verify the final content
+            
+            echo "[backend]" > .circleci/ansible/inventory.txt
+            
+            echo "${BACKEND_PUBLIC_IP} ansible_user=ubuntu" >> .circleci/ansible/inventory.txt 
             echo "--- Generated Inventory ---"
             cat .circleci/ansible/inventory.txt
             echo "-------------------------"
