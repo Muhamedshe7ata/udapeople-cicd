@@ -1,6 +1,6 @@
 ---
 - name: "deployment play."
-  hosts: web
+  hosts: backend
   remote_user: ubuntu
   become: true
   become_method: sudo
