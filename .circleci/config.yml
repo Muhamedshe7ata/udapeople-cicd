@@ -404,14 +404,13 @@ jobs:
       - run:
           name: Deploy backend
           command: |
-            # From input_file_1.png (continuation of command)
             export TYPEORM_MIGRATIONS_DIR=./migrations
             export TYPEORM_ENTITIES=./modules/domain/**/*.entity{.ts,.js}
             export TYPEORM_MIGRATIONS=./migrations/*.ts
 
             cd .circleci/ansible
             cat inventory.txt
-            ansible-playbook -i .circleci/ansible/inventory.txt ansible/roles/deploy/tasks/deploy-backend.yml -vvv
+            ansible-playbook -i inventory.txt deploy-backend.yml
 
       - destroy-environment
       - revert-migrations
