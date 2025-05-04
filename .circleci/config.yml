@@ -379,6 +379,8 @@ jobs:
 
   
   deploy-backend:
+    requires:
+      -  deploy-infrastructure 
     docker:
       - image: cimg/base:stable
     steps:
