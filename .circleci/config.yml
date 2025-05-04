@@ -227,28 +227,13 @@ jobs:
       - run:
          name: Add back-end ip to ansible inventory
          command: |
-            echo "Fetching backend IP..."
-             # Use set -e to exit script if AWS command fails
-            set -e
+            
             BACKEND_PUBLIC_IP=$(aws ec2 describe-instances \
-              --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
-              --query 'Reservations[*].Instances[*].PublicIpAddress' \
-              --output text)
-
-            # Check if the IP variable is empty
-            if [ -z "${BACKEND_PUBLIC_IP}" ]; then
-              echo "Error: Failed to retrieve backend IP address."
-              exit 1
-            fi
-            echo "Backend IP Found: ${BACKEND_PUBLIC_IP}"
-
-            mkdir -p .circleci/ansible
-            echo "[backend]" > .circleci/ansible/inventory.txt
-            echo "${BACKEND_PUBLIC_IP} ansible_user=ubuntu" >> .circleci/ansible/inventory.txt
-
-            echo "--- Generated Inventory ---"
+            --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
+            --query 'Reservations[*].Instances[*].PublicIpAddress' \
+             --output text)
+             echo $BACKEND_PUBLIC_IP >> .circleci/ansible/inventory.txt
             cat .circleci/ansible/inventory.txt
-            echo "---------------------------"
 
       - persist_to_workspace:
           root: ~/ # This root is fine
