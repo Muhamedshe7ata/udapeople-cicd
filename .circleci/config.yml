@@ -210,21 +210,49 @@ jobs:
               --stack-name "udapeople-frontend-${CIRCLE_WORKFLOW_ID:0:7}" \
               --parameter-overrides ID="${CIRCLE_WORKFLOW_ID:0:7}"  
               
+      # - run:
+      #     name: Add back-end ip to ansible inventory
+      #     command: |
+      #       BACKEND_PUBLIC_IP=$(aws ec2 describe-instances \
+      #         --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
+      #         --query 'Reservations[*].Instances[*].PublicIpAddress' \
+      #         --output text)
+      #       echo $BACKEND_PUBLIC_IP >> .circleci/ansible/inventory.txt
+      #       cat .circleci/ansible/inventory.txt
+      # - persist_to_workspace:
+      #     root: ~/
+      #     paths:
+      #       - project/.circleci/ansible/inventory.txt
+      #  # - destroy-environment
       - run:
-          name: Add back-end ip to ansible inventory
-          command: |
+         name: Add back-end ip to ansible inventory
+         command: |
             BACKEND_PUBLIC_IP=$(aws ec2 describe-instances \
               --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
               --query 'Reservations[*].Instances[*].PublicIpAddress' \
               --output text)
-            echo $BACKEND_PUBLIC_IP >> .circleci/ansible/inventory.txt
-            cat .circleci/ansible/inventory.txt
-      - persist_to_workspace:
-          root: ~/
-          paths:
-            - project/.circleci/ansible/inventory.txt
-       # - destroy-environment
+            # INSTEAD OF THIS:
+            # echo $BACKEND_PUBLIC_IP >> .circleci/ansible/inventory.txt
+            # cat .circleci/ansible/inventory.txt
 
+            # DO THIS:
+            # Ensure the directory exists
+            mkdir -p .circleci/ansible
+            # Create the file with the header (overwrite if exists)
+            echo "[web]" > .circleci/ansible/inventory.txt
+            # Append the IP address (use >> here, as the file now definitely exists)
+            echo "${BACKEND_PUBLIC_IP} ansible_user=ubuntu" >> .circleci/ansible/inventory.txt #<-- Add ansible_user if needed! Adjust 'ubuntu' if necessary.
+            # Verify the final content
+            echo "--- Generated Inventory ---"
+            cat .circleci/ansible/inventory.txt
+            echo "-------------------------"
+
+      - persist_to_workspace:
+          root: ~/ # This root is fine
+          paths:
+            - project/.circleci/ansible/inventory.txt # This path seems correct assuming your working_directory is ~/project
+
+###################
   configure-infrastructure:
     docker:
       - image: cimg/base:stable # Or similar base image
