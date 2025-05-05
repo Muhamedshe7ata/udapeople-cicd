@@ -13,7 +13,7 @@ Resources:
       OwnershipControls:
         Rules:
           - ObjectOwnership: BucketOwnerEnforced
-      BucketName:  !Sub  "UdaPeople-${ID}""
+      BucketName:  !Sub  "UdaPeople-${ID}"
       WebsiteConfiguration:
         IndexDocument: index.html
         ErrorDocument: 404.html
@@ -40,4 +40,4 @@ Outputs:
     Value: !GetAtt WebsiteBucket.WebsiteURL
     Description: URL for website hosted on S3
      
-######################
+
