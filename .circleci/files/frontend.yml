@@ -1,39 +1,3 @@
-# Description: >
-#   UdaPeople frontend stack.
-
-# Parameters:
-#   ID:
-#     Description: Unique identifier.
-#     Type: String
-
-# Resources:
-#   WebsiteBucket:
-#     Type: AWS::S3::Bucket
-#     Properties:
-#       ObjectOwnership: BucketOwnerEnforced
-#       BucketName: !Sub "udapeople-${ID}"
-      
-#       WebsiteConfiguration:
-#         IndexDocument: index.html
-#         ErrorDocument: 404.html
-      
-#   WebsiteBucketPolicy:
-#     Type: AWS::S3::BucketPolicy
-#     Properties:
-#       Bucket: !Ref 'WebsiteBucket'
-#       PolicyDocument:
-#         Statement:
-#         - Sid: PublicReadForGetBucketObjects
-#           Effect: Allow
-#           Principal: '*'
-#           Action: s3:GetObject
-#           Resource: !Join ['', ['arn:aws:s3:::', !Ref 'WebsiteBucket', /*]]
-
-# Outputs:
-#   WebsiteURL:
-#     Value: !GetAtt WebsiteBucket.WebsiteURL
-#     Description: URL for website hosted on S3
-
 Description: >
   UdaPeople frontend stack.
 
@@ -49,7 +13,7 @@ Resources:
       OwnershipControls:
         Rules:
           - ObjectOwnership: BucketOwnerEnforced
-      BucketName: !Sub "udapeople-${ID}"
+      BucketName: !Sub "udapeople-example-bucket-name-${ID}"
       WebsiteConfiguration:
         IndexDocument: index.html
         ErrorDocument: 404.html
@@ -62,17 +26,18 @@ Resources:
   WebsiteBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
-      Bucket: !Ref WebsiteBucket
+      Bucket:  !Ref WebsiteBucket
       PolicyDocument:
         Statement:
         - Sid: PublicReadForGetBucketObjects
           Effect: Allow
           Principal: '*'
           Action: s3:GetObject
-          Resource: !Sub 'arn:aws:s3:::${WebsiteBucket}/*'
+          Resource: "arn:aws:s3:::udapeople-example-bucket-name/*"
 
 Outputs:
   WebsiteURL:
     Value: !GetAtt WebsiteBucket.WebsiteURL
     Description: URL for website hosted on S3
+     
 ######################
