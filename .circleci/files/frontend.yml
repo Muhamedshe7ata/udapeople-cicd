@@ -37,7 +37,7 @@ Resources:
 
 Outputs:
   WebsiteURL:
-    Value: !GetAtt: websiteBucket.WebsiteURL
+    Value: !GetAtt websiteBucket.WebsiteURL
         
     Description: URL for website hosted on S3
      
