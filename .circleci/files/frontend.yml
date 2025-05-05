@@ -13,7 +13,8 @@ Resources:
       OwnershipControls:
         Rules:
           - ObjectOwnership: BucketOwnerEnforced
-      BucketName:  !Sub  "UdaPeople-${ID}"
+      BucketName: 
+        Fn::Sub: "UdaPeople-${ID}"
       WebsiteConfiguration:
         IndexDocument: index.html
         ErrorDocument: 404.html
@@ -26,18 +27,21 @@ Resources:
   WebsiteBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
-      Bucket:  !Ref 'WebsiteBucket'
+      Bucket:  {"Ref": "WebsiteBucket"}
       PolicyDocument:
         Statement:
         - Sid: PublicReadForGetBucketObjects
           Effect: Allow
           Principal: '*'
           Action: s3:GetObject
-           Resource: "arn:aws:s3:::UdaPeople-${ID}/*"
+          Resource: !Sub "arn:aws:s3:::UdaPeople-${ID}/*"
 
 Outputs:
   WebsiteURL:
-    Value: !GetAtt WebsiteBucket.WebsiteURL
+    Value: 
+      Fn::GetAtt: 
+        - WebsiteBucket
+        - WebsiteEndpoint
     Description: URL for website hosted on S3
      
 
