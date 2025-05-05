@@ -406,15 +406,29 @@ jobs:
 
              
       - run:
+            
           name: Package Backend
           command: |
+            echo "--- Starting Package Backend Step ---"
+            echo "Current directory: $(pwd)"
             cd backend
+            echo "Inside backend/ directory: $(pwd)"
+            echo "Running npm run build..."
             npm run build
+            echo "Running tar command..."
             tar -czf artifact.tar.gz dist/* package*
+            echo "Checking if artifact.tar.gz exists in backend/:"
+            ls -la artifact.tar.gz # Check if tar created the file here
             cd ..
-            # This correctly copies the artifact into the role's files directory
+            echo "Back to project root: $(pwd)"
+            echo "Checking if target directory exists:"
+            ls -ld .circleci/ansible/roles/deploy/files # Check if the target dir exists
+            echo "Copying artifact..."
             cp backend/artifact.tar.gz .circleci/ansible/roles/deploy/files
-
+            echo "Checking if artifact.tar.gz exists in target directory:"
+            ls -la .circleci/ansible/roles/deploy/files/artifact.tar.gz # Check if cp worked
+          
+            echo "--- Finished Package Backend Step ---"
       # This is the MODIFIED run step for deploying the backend
       - run:
           name: Deploy backend
@@ -426,7 +440,7 @@ jobs:
 
             echo "Checking for artifact file before running Ansible:"
             ls -la .circleci/ansible/roles/deploy/files/artifact.tar.gz
-            
+
             # --- Removed 'cd .circleci/ansible' command ---
             # --- Removed debug echo/ls commands as they are no longer needed here ---
 
