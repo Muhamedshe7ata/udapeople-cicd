@@ -424,6 +424,9 @@ jobs:
             export TYPEORM_ENTITIES=./modules/domain/**/*.entity{.ts,.js}
             export TYPEORM_MIGRATIONS=./migrations/*.ts
 
+            echo "Checking for artifact file before running Ansible:"
+            ls -la .circleci/ansible/roles/deploy/files/artifact.tar.gz
+            
             # --- Removed 'cd .circleci/ansible' command ---
             # --- Removed debug echo/ls commands as they are no longer needed here ---
 
