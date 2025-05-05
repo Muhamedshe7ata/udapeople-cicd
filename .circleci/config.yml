@@ -227,15 +227,30 @@ jobs:
       - run:
          name: Add back-end ip to ansible inventory
          command: |
+
+                    echo "Attempting to fetch IP for tag: Name=backend-${CIRCLE_WORKFLOW_ID:0:7}"
+       
+                    BACKEND_PUBLIC_IP=$(aws ec2 describe-instances \
+                      --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
+                      --query 'Reservations[*].Instances[*].PublicIpAddress' \
+                      --output text)
+
+                    echo "IP Address Fetched: [$BACKEND_PUBLIC_IP]" # Debug echo
+
+                    # Create/Overwrite the inventory file with the group header
+                    # Make sure the path here is correct relative to the project root
+                    echo "[web]" > .circleci/ansible/inventory.txt
+
+                    # Append the fetched IP address to the inventory file
+                    echo "$BACKEND_PUBLIC_IP" >> .circleci/ansible/inventory.txt
+
+                    echo "Final contents of inventory file in this step:"
+                    # Make sure the path here is correct relative to the project root
+                    cat .circleci/ansible/inventory.txt        
+                              
+                    
             
-            BACKEND_PUBLIC_IP=$(aws ec2 describe-instances \
-            --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
-            --query 'Reservations[*].Instances[*].PublicIpAddress' \
-            --output text)
-            echo "[web]" > .circleci/ansible/inventory.txt
-            echo $BACKEND_PUBLIC_IP >> .circleci/ansible/inventory.txt
-            cat .circleci/ansible/inventory.txt
-      
+ 
 
       - persist_to_workspace:
           root: ~/ # This root is fine
