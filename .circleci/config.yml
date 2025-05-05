@@ -409,6 +409,8 @@ jobs:
             
           name: Package Backend
           command: |
+        
+          
             echo "--- Starting Package Backend Step ---"
             echo "Current directory: $(pwd)"
             cd backend
@@ -421,15 +423,19 @@ jobs:
             ls -la artifact.tar.gz # Check if tar created the file here
             cd ..
             echo "Back to project root: $(pwd)"
+
+            # ---> ADD THIS LINE TO CREATE THE DIRECTORY <---
+            echo "Creating target directory if it doesn't exist..."
+            mkdir -p .circleci/ansible/roles/deploy/files
+
             echo "Checking if target directory exists:"
-            ls -ld .circleci/ansible/roles/deploy/files # Check if the target dir exists
+            ls -ld .circleci/ansible/roles/deploy/files # Check if the target dir exists (should now work)
             echo "Copying artifact..."
             cp backend/artifact.tar.gz .circleci/ansible/roles/deploy/files
             echo "Checking if artifact.tar.gz exists in target directory:"
             ls -la .circleci/ansible/roles/deploy/files/artifact.tar.gz # Check if cp worked
-          
             echo "--- Finished Package Backend Step ---"
-      # This is the MODIFIED run step for deploying the backend
+            
       - run:
           name: Deploy backend
           command: |
