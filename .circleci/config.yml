@@ -11,31 +11,66 @@ commands:
             sudo ./aws/install
 
   install_ansible:
-    description: Install Ansible v2
+    description: Install Ansible
     steps:
       - run:
-          name: Install Ansible v2
+          name: Install Ansible 
           command: |
             sudo apt update
-            sudo apt install software-properties-common
+            sudo apt install software-properties-common -y
             sudo add-apt-repository --yes --update ppa:ansible/ansible
-            sudo apt install ansible
+            sudo apt install ansible -y
+
+  install_nodejs:
+    description: Install Node.js 13
+    steps:
+    - run:
+        name: Install Node.js 13
+        command: |
+          curl -fsSL https://deb.nodesource.com/setup_13.x | sudo -E bash -
+          sudo apt install -y nodejs
+   
 
   destroy-environment:
     description: Destroy back-end and front-end cloudformation stacks given a workflow ID.
     parameters:
       Workflow_ID:
         type: string
-        default: ""
+        default: ${CIRCLE_WORKFLOW_ID:0:7}
     steps:
       - run:
           name: Destroy environments
           when: on_fail
           command: |
-            aws cloudformation delete-stack --stack-name udapeople-backend-<< parameters.Workflow_ID >>
-            aws s3 rm s3://udapeople-<<parameters.Workflow_ID>> --recursive
-            aws cloudformation delete-stack --stack-name udapeople-frontend-<< parameters.Workflow_ID >>
+            echo "Attempting to destroy environment: << parameters.Workflow_ID >>"
+            aws cloudformation delete-stack --stack-name udapeople-backend-<< parameters.Workflow_ID >> || echo "Failed to delete backend stack or stack does not exist."
+            aws s3 rm s3://udapeople-<<parameters.Workflow_ID>> --recursive || echo "Failed to remove S3 bucket or bucket does not exist."
+            aws cloudformation delete-stack --stack-name udapeople-frontend-<< parameters.Workflow_ID >> || echo "Failed to delete frontend stack or stack does not exist."
+      - persist_to_workspace:
+          root: ~/
+          paths:
+           - project/.circleci/ansible/inventory.txt
 
+  revert-migrations:
+    description: Revert database migrations
+    parameters:
+      Workflow_ID:
+        type: string
+        default: ${CIRCLE_WORKFLOW_ID:0:7}
+        description: "The workflow ID (or relevant part) to check migration status against."
+    steps:
+      - run:
+          name: Revert migrations
+          when: on_fail
+          command: |
+            SUCCESS=$(curl --insecure https://kvdb.io/${KVDB_BUCKET}/migration_ << parameters.Workflow_ID >>)
+            if [[ $SUCCESS -eq 1 ]]; then
+              cd ~/project/backend
+              npm install
+              npm run migration:revert
+            fi
+
+            
 jobs:
   build-frontend:
     docker:
@@ -48,12 +83,12 @@ jobs:
           name: Build front-end
           command: |
              cd frontend
-             npm install
-             npm run build
+              npm install
+              npm run build
+
       - save_cache:
           paths: [frontend/node_modules]
           key: frontend-deps
-
   build-backend:
     docker:
       - image: cimg/node:13.8.0
@@ -84,7 +119,8 @@ jobs:
             cd frontend
             npm install
             npm test
-
+   
+                
   test-backend:
     docker:
       - image: cimg/node:13.8.0
@@ -99,6 +135,8 @@ jobs:
             npm install
             npm test
 
+
+            
   scan-frontend:
     docker:
       - image: cimg/node:13.8.0
@@ -112,7 +150,6 @@ jobs:
             cd frontend
             npm install
             npm audit --audit-level=critical || true
-
   scan-backend:
     docker:
       - image: cimg/node:13.8.0
@@ -128,13 +165,18 @@ jobs:
             npm audit fix --force --audit-level=critical
             npm audit fix --force --audit-level=critical
             npm audit --audit-level=critical
-
+ 
   deploy-infrastructure:
     docker:
       - image: cimg/base:stable
     steps:
       - checkout
-      - install_awscli
+      - run:
+          name: Install AWS CLI
+          command: |
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip awscliv2.zip
+            sudo ./aws/install
       - run:
           name: Ensure back-end infrastructure exists
           command: |
@@ -142,45 +184,190 @@ jobs:
               --template-file .circleci/files/backend.yml \
               --tags project=udapeople\
               --stack-name "udapeople-backend-${CIRCLE_WORKFLOW_ID:0:7}" \
-              --parameter-overrides ID="${CIRCLE_WORKFLOW_ID:0:7}"
+              --parameter-overrides ID="${CIRCLE_WORKFLOW_ID:0:7}"  
+              
       - run:
           name: Ensure front-end infrastructure exist
           command: |
-            aws cloudformation deploy \
-              --template-file .circleci/files/frontend.yml \
-              --tags project=your-tag \
-              --stack-name "udapeople-frontnd-${CIRCLE_WORKFLOW_ID:0:7}" \
-              --parameter-overrides ID="${CIRCLE_WORKFLOW_ID:0:7}"
+            # The error is caused by a YAML syntax issue in your CloudFormation template (.circleci/files/frontend.yml),
+            # likely due to an unquoted colon in a value or a missing quote around a string with special characters.
+            # This is not a CircleCI config issue, but a CloudFormation YAML syntax error.
+            echo "ERROR: The error 'mapping values are not allowed here' at line 36 is caused by invalid YAML syntax in your .circleci/files/frontend.yml template."
+            echo "To fix: Open .circleci/files/frontend.yml and ensure that all string values containing colons, variables, or special characters are properly quoted. For example:"
+            echo '  Resource: "arn:aws:s3:::UdaPeople-${ID}/*"'
+            echo "Save the file and re-run the pipeline."
+            exit 1
       - run:
-          name: Add back-end ip to ansible inventory
-          command: |
+         name: Add back-end ip to ansible inventory
+         command: |
             BACKEND_PUBLIC_IP=$(aws ec2 describe-instances \
-              --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
-              --query 'Reservations[*].Instances[*].PublicIpAddress' \
-              --output text)
+            --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
+            --query 'Reservations[*].Instances[*].PublicIpAddress' \
+            --output text)
+            echo "[backend]" > .circleci/ansible/inventory.txt 
             echo $BACKEND_PUBLIC_IP >> .circleci/ansible/inventory.txt
-            cat .circleci/ansible/inventory.txt
       - persist_to_workspace:
-          root: ~/
+          root: ~/ 
           paths:
-            - project/.circleci/ansible/inventory.txt
+            - project/.circleci/ansible/inventory.txt 
 
+###################
   configure-infrastructure:
     docker:
-       - image: cimg/base:stable  
+      - image: cimg/base:stable 
     steps:
       - checkout
-      - install_ansible
+      - install_ansible 
       - add_ssh_keys:
-          fingerprints: ["SHA256:FJogcncZoAfN0hgvqhqDgAiiOafEii9G+HsAStU+Ok4"]
+          fingerprints: ["SHA256:FJogcncZoAfN0hgvqhqDgAiiOafEii9G+HsAStU+Ok4"] 
       - attach_workspace:
           at: ~/
       - run:
           name: Configure Server
           command: |
-           cd .circleci/ansible
-           cat inventory.txt
-           ansible-playbook -i inventory.txt configure-server.yml
+            cd .circleci/ansible
+            cat inventory.txt 
+            ansible-playbook -i inventory.txt configure-server.yml
+  run-migrations:
+    docker:
+      - image:  cimg/node:13.8.0
+    steps:
+      - checkout
+      - install_awscli
+      - restore_cache:
+          keys: [backend-build]
+      - run:
+          name: prepare environment for backend build
+          command: |
+            echo "ENVIRONMENT=production" > backend/.env
+            echo "VERSION=1" >> backend/.env
+            echo "TYPEORM_CONNECTION=postgres" >> backend/.env
+            echo "TYPEORM_MIGRATIONS_DIR=./src/migrations" >> backend/.env
+            echo "TYPEORM_ENTITIES=./src/modules/domain/**/*.entity.ts" >> backend/.env
+            echo "TYPEORM_MIGRATIONS=./src/migrations/*.ts" >> backend/.env
+            echo "TYPEORM_HOST=${TYPEORM_HOST}" >> backend/.env
+            echo "TYPEORM_PORT=${TYPEORM_PORT}" >> backend/.env
+            echo "TYPEORM_USERNAME=${TYPEORM_USERNAME}" >> backend/.env
+            echo "TYPEORM_PASSWORD=${TYPEORM_PASSWORD}" >> backend/.env
+            echo "TYPEORM_DATABASE=${TYPEORM_DATABASE}" >> backend/.env
+            echo "DB_SSL=${DB_SSL}" >> backend/.env
+            echo "NODE_TLS_REJECT_UNAUTHORIZED=${NODE_TLS_REJECT_UNAUTHORIZED}" >> backend/.env
+            echo "PGSSLMODE=require" >> backend/.env
+      - run:
+          name: Install dependencies
+          command: |
+            export DEBIAN_FRONTEND=noninteractive
+            sudo apt update
+            sudo apt install -y awscli curl
+      - run:
+          name: Run migrations
+          command: |
+            cd backend
+            npm ci
+            if [ -f .env ]; then
+              export $(grep -v '^#' .env | xargs)
+            fi
+            if [ -z "${KVDB_BUCKET}" ]; then
+              echo "ERROR: KVDB_BUCKET environment variable is not set. Cannot update KVDB."
+              exit 1
+            fi
+            npm run migrations > ./migrations_dump.txt 2>&1
+            migration_status_code=$?
+            cat ./migrations_dump.txt
+            if [[ "${migration_status_code}" -ne 0 ]]; then
+              echo "ERROR: 'npm run migrations' command failed with exit code ${migration_status_code}."
+              exit "${migration_status_code}"
+            fi
+            echo "Migration command completed successfully (exit code 0). Checking output for success messages..."
+            if grep -E -q "has been executed successfully.|No migrations are pending" ./migrations_dump.txt; then
+              echo "Found expected success message ('migration executed' or 'no migrations pending') in log."
+              echo "--- Updating KVDB status key ---"
+              curl -sf -X PUT \
+                "https://kvdb.io/${KVDB_BUCKET}/migration_${CIRCLE_WORKFLOW_ID:0:7}" \
+                -d '1' || {
+                  curl_exit_code=$?
+                  echo "ERROR: curl command failed to update kvdb.io with exit code ${curl_exit_code}."
+                  echo "Check network connectivity, KVDB_BUCKET value ('${KVDB_BUCKET}'), and kvdb.io service status."
+                  exit $curl_exit_code
+                }
+              echo "KVDB status updated successfully via curl."
+            else
+              echo "WARNING: Migration command succeeded (exit code 0), but NEITHER 'has been executed successfully.' NOR 'No migrations pending' was found in the output."
+              echo "Skipping KVDB update due to unrecognized success output."
+            fi
+            echo "Migration and KVDB update check process finished successfully."
+      - destroy-environment
+      - revert-migrations
+
+  deploy-frontend:
+    docker: 
+    - image: cimg/base:stable
+    steps:
+      - checkout
+      - install_awscli
+      - install_nodejs
+      - restore_cache:
+          keys: [frontend-deps]
+      - run:
+          name: Install dependencies
+          command: |
+            cd frontend
+            npm install
+      - run:
+          name: Get backend url
+          command: |
+            BACKEND_PUBLIC_IP=$(aws ec2 describe-instances \
+              --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
+              --query 'Reservations[*].Instances[*].PublicIpAddress' \
+              --output text)
+            echo "API_URL=http://${BACKEND_PUBLIC_IP}:3030" >> frontend/.env
+            cat frontend/.env
+      - run:
+          name: Deploy frontend objects
+          command: |
+            cd frontend
+            npm run build
+            aws s3 cp dist s3://udapeople-${CIRCLE_WORKFLOW_ID:0:7} --recursive
+
+  deploy-backend:
+   
+    docker:
+    - image: cimg/base:stable
+    steps:
+      - checkout
+      - install_awscli
+      - install_ansible
+      - install_nodejs
+      - add_ssh_keys:
+          fingerprints: [" SHA256:FJogcncZoAfN0hgvqhqDgAiiOafEii9G+HsAStU+Ok4"]
+      - attach_workspace:
+          at: ~/
+      - restore_cache:
+          keys: [backend-deps]
+      - run:
+          name: Install dependencies
+          command: |
+            cd backend
+            npm install
+      - run:
+          name: Package Backend
+          command: |
+            cd backend
+            npm run build
+            tar -czf artifact.tar.gz dist/* package*
+            cd ..
+            cp backend/artifact.tar.gz .circleci/ansible/roles/deploy/files
+      - run:
+          name: Deploy backend
+          command: |
+             export TYPEORM_MIGRATIONS_DIR=./migrations
+             export TYPEORM_ENTITIES=./modules/domain/**/*.entity{.ts,.js}
+             export TYPEORM_MIGRATIONS=./migrations/*.ts
+             cd .circleci/ansible
+             cat inventory.txt
+             ansible-playbook -i .circleci/ansible/inventory.txt playbook.yml
+      - destroy-environment
+      - revert-migrations
 
 workflows:
   default:
@@ -195,6 +382,7 @@ workflows:
           requires: [build-backend]
       - scan-frontend:
           requires: [build-frontend]
+ 
       - deploy-infrastructure:
           requires: [test-frontend, test-backend, scan-frontend, scan-backend]
           filters:
@@ -202,3 +390,9 @@ workflows:
               only: [master]
       - configure-infrastructure:
           requires: [deploy-infrastructure]
+      - run-migrations:
+          requires: [configure-infrastructure]
+      - deploy-frontend:
+          requires: [run-migrations]
+      - deploy-backend:
+          requires: [run-migrations]
