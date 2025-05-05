@@ -407,7 +407,7 @@ jobs:
              cd .circleci/ansible
              cat inventory.txt
             
-             ansible-playbook -i .circleci/ansible/inventory.txt  deploy-backend.yml
+             ansible-playbook -i  inventory.txt  deploy-backend.yml
 
 
       - destroy-environment
