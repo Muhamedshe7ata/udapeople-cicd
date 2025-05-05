@@ -404,6 +404,7 @@ jobs:
             cd backend
             npm install
 
+             
       - run:
           name: Package Backend
           command: |
@@ -411,24 +412,25 @@ jobs:
             npm run build
             tar -czf artifact.tar.gz dist/* package*
             cd ..
+            # This correctly copies the artifact into the role's files directory
             cp backend/artifact.tar.gz .circleci/ansible/roles/deploy/files
+
+      # This is the MODIFIED run step for deploying the backend
       - run:
           name: Deploy backend
           command: |
-             export TYPEORM_MIGRATIONS_DIR=./migrations
-             export TYPEORM_ENTITIES=./modules/domain/**/*.entity{.ts,.js}
-             export TYPEORM_MIGRATIONS=./migrations/*.ts
+            # Export environment variables (Keep these as they are)
+            export TYPEORM_MIGRATIONS_DIR=./migrations
+            export TYPEORM_ENTITIES=./modules/domain/**/*.entity{.ts,.js}
+            export TYPEORM_MIGRATIONS=./migrations/*.ts
 
-             cd .circleci/ansible
-             echo "Current directory:"
-             pwd
-             echo "Files in current directory:"
-             ls -la
-             echo "Contents of inventory.txt:"
-             cat inventory.txt
-            
-             ansible-playbook -i inventory.txt deploy-backend.yml
+            # --- Removed 'cd .circleci/ansible' command ---
+            # --- Removed debug echo/ls commands as they are no longer needed here ---
 
+            # --- Run ansible-playbook from the project root ---
+            # --- Using paths relative to the project root ---
+            echo "Running Ansible Playbook from Project Root"
+            ansible-playbook -i .circleci/ansible/inventory.txt .circleci/ansible/deploy-backend.yml
 
       - destroy-environment
       - revert-migrations
