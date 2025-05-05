@@ -405,8 +405,14 @@ jobs:
              export TYPEORM_MIGRATIONS=./migrations/*.ts
 
              cd .circleci/ansible
+             echo "Current directory:"
+             pwd
+             echo "Files in current directory:"
+             ls -la
+             echo "Contents of inventory.txt:"
              cat inventory.txt
-             ansible-playbook -i .circleci/ansible/inventory.txt .circleci/ansible/deploy-backend.yml
+            
+             ansible-playbook -i inventory.txt deploy-backend.yml
 
 
       - destroy-environment
