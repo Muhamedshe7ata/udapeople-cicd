@@ -409,7 +409,9 @@ jobs:
             
           name: Package Backend
           command: |
-        
+
+            cd backend
+            npm run build
           
             echo "--- Starting Package Backend Step ---"
             echo "Current directory: $(pwd)"
@@ -435,7 +437,7 @@ jobs:
             echo "Checking if artifact.tar.gz exists in target directory:"
             ls -la .circleci/ansible/roles/deploy/files/artifact.tar.gz # Check if cp worked
             echo "--- Finished Package Backend Step ---"
-            
+
       - run:
           name: Deploy backend
           command: |
