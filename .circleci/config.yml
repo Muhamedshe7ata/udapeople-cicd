@@ -253,10 +253,10 @@ jobs:
  
 
       - persist_to_workspace:
-          root: ~/ # This root is fine
+          root: . # This root is fine
           paths:
-            - project/.circleci/ansible/inventory.txt # This path seems correct assuming your working_directory is ~/project
-
+            - .circleci/ansible/inventory.txt # This path seems correct assuming your working_directory is ~/project
+      
 ###################
   configure-infrastructure:
     docker:
@@ -395,7 +395,7 @@ jobs:
       - add_ssh_keys:
           fingerprints: [" SHA256:FJogcncZoAfN0hgvqhqDgAiiOafEii9G+HsAStU+Ok4"]
       - attach_workspace:
-          at: ~/
+          at: .
       - restore_cache:
           keys: [backend-deps]
       - run:
