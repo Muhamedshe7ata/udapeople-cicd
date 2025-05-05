@@ -410,12 +410,14 @@ jobs:
           name: Package Backend
           command: |
 
-            cd backend
-            npm run build
-          
+           
             echo "--- Starting Package Backend Step ---"
             echo "Current directory: $(pwd)"
-            cd backend
+            # ---> ADD THIS CHECK <---
+            echo "Listing directory contents before cd:"
+            ls -la
+            # ---> END OF CHECK <---
+            cd backend # This is the line that was failing
             echo "Inside backend/ directory: $(pwd)"
             echo "Running npm run build..."
             npm run build
@@ -425,13 +427,10 @@ jobs:
             ls -la artifact.tar.gz # Check if tar created the file here
             cd ..
             echo "Back to project root: $(pwd)"
-
-            # ---> ADD THIS LINE TO CREATE THE DIRECTORY <---
             echo "Creating target directory if it doesn't exist..."
             mkdir -p .circleci/ansible/roles/deploy/files
-
             echo "Checking if target directory exists:"
-            ls -ld .circleci/ansible/roles/deploy/files # Check if the target dir exists (should now work)
+            ls -ld .circleci/ansible/roles/deploy/files # Check if the target dir exists
             echo "Copying artifact..."
             cp backend/artifact.tar.gz .circleci/ansible/roles/deploy/files
             echo "Checking if artifact.tar.gz exists in target directory:"
