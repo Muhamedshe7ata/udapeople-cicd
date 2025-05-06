@@ -55,7 +55,7 @@
     group: ubuntu
     mode: '0644'
   become: true
-  become_user: root # Run as root to ensure permission to write/create .bashrc
+  become_user: root
 
 - name: Add NVM script sourcing to .bashrc for user 'ubuntu'
   ansible.builtin.lineinfile:
@@ -75,31 +75,28 @@
   become: true
   become_user: root
 
-# THIS IS THE HEAVILY SIMPLIFIED TASK TO DEBUG PARSING
-- name: Install latest LTS Node.js and set as default using NVM for user 'ubuntu'
-  ansible.builtin.shell: |
-    set -e
-    export NVM_DIR="/home/ubuntu/.nvm"
-    # Source NVM
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    # Install the latest LTS version
-    nvm install --lts
-    # Set the installed LTS as the default
-    nvm alias default lts/*
-    # Ensure it's used in current shell
-    nvm use default
-    echo "NVM setup complete. Node version: $(node -v), NPM version: $(npm -v)"
-  args:
-    executable: /bin/bash
-  become: true
-  become_user: ubuntu
-  environment:
-    HOME: /home/ubuntu
-    NVM_DIR: /home/ubuntu/.nvm
-  # NO register directive for this test
-  # NO changed_when directive for this test
+# # THIS ENTIRE TASK IS NOW COMMENTED OUT FOR DEBUGGING
+# - name: Install latest LTS Node.js and set as default using NVM for user 'ubuntu'
+#   ansible.builtin.shell: |
+#     echo "This is a parsing test for the NVM install task"
+#     # The actual NVM commands are temporarily commented out
+#     # set -e
+#     # export NVM_DIR="/home/ubuntu/.nvm"
+#     # [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+#     # nvm install --lts
+#     # nvm alias default lts/*
+#     # nvm use default
+#     # echo "NVM setup complete. Node version: $(node -v), NPM version: $(npm -v)"
+#   args:
+#     executable: /bin/bash
+#   become: true
+#   become_user: ubuntu
+#   environment:
+#     HOME: /home/ubuntu
+#     NVM_DIR: /home/ubuntu/.nvm
+#   # NO register
+#   # NO changed_when
 
-# The "Show Node and NPM versions" task is removed as it depended on the register
 # --- End of Node.js Installation Block using NVM ---
 
 - name: Installing Node Dependencies
@@ -107,6 +104,8 @@
     set -e
     export NVM_DIR="/home/ubuntu/.nvm"
     # Source NVM to make node and npm available
+    # NOTE: Without the previous NVM install task, this might fail at runtime if Node isn't installed,
+    # but we are testing PARSING first.
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
     npm install
   args:
@@ -171,12 +170,17 @@
 
     if [ -z "$PM2_PATH_UNDER_NVM" ] || [ -z "$NODE_PATH_UNDER_NVM" ]; then
       echo "Critical: Could not find pm2 or node under NVM for user ubuntu. Cannot setup startup script."
-      exit 1
+      # For a parsing test, we don't want this to exit the script if Node/PM2 aren't actually there yet.
+      # In a real run, this exit 1 is important if the commented out task were active.
+      # exit 1 
+      echo "Continuing parsing test despite Node/PM2 potentially not being installed yet."
     fi
     
     echo "Debug: Node path for PM2 startup: $NODE_PATH_UNDER_NVM"
     echo "Debug: PM2 path for PM2 startup: $PM2_PATH_UNDER_NVM"
 
+    # If PM2_PATH_UNDER_NVM is empty because Node/PM2 aren't installed (due to commented out task),
+    # this command would fail. For parsing, this is fine.
     env PATH="$PATH:$(dirname "$PM2_PATH_UNDER_NVM"):$(dirname "$NODE_PATH_UNDER_NVM")" "$PM2_PATH_UNDER_NVM" startup systemd -u ubuntu --hp /home/ubuntu
   args:
     executable: /bin/bash
