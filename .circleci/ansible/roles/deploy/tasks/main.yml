@@ -1,158 +1,150 @@
-  # tasks file for deploy role
+# tasks file for deploy role
 ---
-  - name: Creates backend app directory
-    ansible.builtin.file:
-      path: ~/backend-app # Make sure this is the correct desired path on the server
-      state: directory
-      mode: '0755' # Set appropriate permissions
+- name: Creates backend app directory
+  ansible.builtin.file:
+    path: ~/backend-app # Make sure this is the correct desired path on the server
+    state: directory
+    mode: '0755' # Set appropriate permissions
 
-  - name: Unarchive backend files
-    ansible.builtin.unarchive:
-      src: artifact.tar.gz # Assuming this is in roles/deploy/files on the controller
-      dest: ~/backend-app # The directory created above
-      remote_src: no # Specifies src is on the controller
+- name: Unarchive backend files
+  ansible.builtin.unarchive:
+    src: artifact.tar.gz # Assuming this is in roles/deploy/files on the controller
+    dest: ~/backend-app # The directory created above
+    remote_src: no # Specifies src is on the controller
 
-  # --- Block to Install Node.js and npm using Apt ---
-  - name: Ensure prerequisites for adding HTTPS apt repos are installed
-    ansible.builtin.apt:
-      name:
-        - apt-transport-https # Though usually included with apt now
-        - ca-certificates
-        - curl
-        - gnupg # For gpg --dearmor
-      state: present
-      update_cache: yes
-    become: true # Run as root
+# --- Block to Install Node.js and npm using Apt ---
+- name: Ensure prerequisites for adding HTTPS apt repos are installed
+  ansible.builtin.apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg # For gpg --dearmor
+    state: present
+    update_cache: yes
+  become: true # Run as root
 
-  - name: Test connectivity to NodeSource (keeping for debug if needed)
-    ansible.builtin.shell: curl -v https://deb.nodesource.com/gpgkey/nodesource.gpg.key
-    register: curl_test_output
-    ignore_errors: true
-    become: true
-    changed_when: false # This task doesn't change system state
+- name: Test connectivity to NodeSource (optional debug)
+  ansible.builtin.shell: curl -v https://deb.nodesource.com/gpgkey/nodesource.gpg.key
+  register: curl_test_output
+  ignore_errors: true
+  become: true
+  changed_when: false # This task doesn't change system state
 
-  - name: Show connectivity test output (keeping for debug if needed)
-    ansible.builtin.debug:
-      msg:
-        - "Curl stdout: {{ curl_test_output.stdout }}"
-        - "Curl stderr: {{ curl_test_output.stderr }}"
-    when: curl_test_output is defined and (curl_test_output.stdout or curl_test_output.stderr)
+- name: Show connectivity test output (optional debug)
+  ansible.builtin.debug:
+    msg:
+      - "Curl stdout: {{ curl_test_output.stdout }}"
+      - "Curl stderr: {{ curl_test_output.stderr }}"
+  when: curl_test_output is defined and (curl_test_output.stdout or curl_test_output.stderr)
 
-  # Step 2 (New): Add NodeSource GPG key securely
-  - name: Add NodeSource GPG key
-    ansible.builtin.shell: |
-      set -e
-      curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | gpg --dearmor -o /etc/apt/trusted.gpg.d/nodesource.gpg
-      chmod 644 /etc/apt/trusted.gpg.d/nodesource.gpg
-    args:
-      creates: /etc/apt/trusted.gpg.d/nodesource.gpg # Makes the task idempotent
-    become: true
-    changed_when: false # Idempotency handled by 'creates'
+- name: Add NodeSource GPG key
+  ansible.builtin.shell: |
+    set -e
+    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | gpg --dearmor -o /etc/apt/trusted.gpg.d/nodesource.gpg
+    chmod 644 /etc/apt/trusted.gpg.d/nodesource.gpg
+  args:
+    creates: /etc/apt/trusted.gpg.d/nodesource.gpg # Makes the task idempotent
+    executable: /bin/bash # Good practice for multi-line shell with set -e
+  become: true
+  changed_when: false # Idempotency handled by 'creates'
 
-  # Step 3 (Modified): Add NodeSource repository
-  - name: Add NodeSource repository (Using LTS version)
-    ansible.builtin.apt_repository:
-      # If you need a specific version like 18.x, change node_lts.x to node_18.x
-      repo: "deb [signed-by=/etc/apt/trusted.gpg.d/nodesource.gpg] https://deb.nodesource.com/node_lts.x {{ ansible_distribution_release }} main"
-      state: present
-      update_cache: yes # This will run apt update if the repo is added or changed
-    become: true # Run as root
-    register: nodesource_repo_added
+- name: Add NodeSource repository (Using LTS version)
+  ansible.builtin.apt_repository:
+    # If you need a specific version like 18.x, change node_lts.x to node_18.x
+    repo: "deb [signed-by=/etc/apt/trusted.gpg.d/nodesource.gpg] https://deb.nodesource.com/node_lts.x {{ ansible_distribution_release }} main"
+    state: present
+    update_cache: yes # This will run apt update if the repo is added or changed
+  become: true # Run as root
+  register: nodesource_repo_added
 
-  # Step 4 (Streamlined): Install Node.js and npm
-  - name: Install Node.js and npm
-    ansible.builtin.apt:
-      name: nodejs # Installing nodejs package from NodeSource repo
-      state: present
-      # No need for update_cache: yes here if apt_repository did it.
-      # However, if nodesource_repo_added was not changed (meaning repo already existed),
-      # an update_cache here might be beneficial, but usually not strictly necessary
-      # if the previous apt_repository ensures it.
-      # To be safe, or if this task could run independently:
-      # update_cache: "{{ nodesource_repo_added.changed }}"
-    become: true # Run as root
-  # --- End of Node.js Installation Block ---
+- name: Install Node.js and npm
+  ansible.builtin.apt:
+    name: nodejs # Installing nodejs package from NodeSource repo
+    state: present
+  become: true # Run as root
+# --- End of Node.js Installation Block ---
 
-    # ... (previous tasks like Node.js installation, GPG key, etc., should be as per my prior successful fix)
+- name: Installing Node Dependencies
+  ansible.builtin.command: # Using command module is often safer for things like npm install
+    cmd: npm install
+    chdir: ~/backend-app # Runs npm install inside this directory
+  become: true
+  become_user: ubuntu # Example: Run npm as the ubuntu user
+  environment:
+    HOME: /home/ubuntu # Assuming ubuntu user's home directory
 
-  - name: Installing Node Dependencies
-    ansible.builtin.command: # Using command module is often safer for things like npm install
-      cmd: npm install
-      chdir: ~/backend-app # Runs npm install inside this directory
-    become: true # Might be needed depending on global packages/permissions
-    become_user: ubuntu # Example: Run npm as the ubuntu user
-    environment:
-      HOME: /home/ubuntu # Assuming ubuntu user's home directory
+- name: Installing PM2 globally
+  ansible.builtin.npm:
+    name: pm2
+    global: yes
+    state: present
+  become: true # Needs to be root to install globally
+  environment:
+    # Common paths where node/npm binaries get installed
+    PATH: "/usr/local/bin:/usr/bin:/bin:/snap/bin:{{ ansible_env.PATH }}"
 
-  - name: Installing PM2 globally
-    ansible.builtin.npm:
-      name: pm2
-      global: yes
-      state: present
-    become: true # Needs to be root to install globally
-    environment:
-      PATH: "/usr/local/bin:/usr/bin:/bin:/snap/bin" # Common paths where node/npm might be
+- name: Ensuring app is started/restarted with PM2
+  ansible.builtin.shell: |
+    set -e
+    # This script runs as the 'ubuntu' user due to become_user.
+    # HOME and PM2_HOME ensure pm2 uses the correct directories for this user.
+    # Assumes 'ecosystem.config.js' is in '~/backend-app'.
+    pm2 startOrRestart ecosystem.config.js
+  become: true
+  become_user: ubuntu
+  args:
+    chdir: ~/backend-app # Ensure commands run relative to the app directory
+    executable: /bin/bash # Ensures the script runs in a bash shell
+  environment:
+    HOME: /home/ubuntu
+    PM2_HOME: /home/ubuntu/.pm2 # Explicitly set PM2_HOME
+    # Augment PATH if pm2 is in a non-standard location for the ubuntu user,
+    # though global npm installs often land in a standard part of the PATH.
+    # PATH: "/usr/local/bin:{{ ansible_env.PATH }}" # Example if needed
+  register: execute_node
 
-  - name: Ensuring app is started/restarted with PM2
-    ansible.builtin.shell: |
-      set -e
-      # Ensure relevant paths are available for the ubuntu user
-      # Default PM2 path will be used if in the user's standard PATH after global install.
-      # Setting HOME and PM2_HOME ensures pm2 operates in the correct context.
-      pm2 startOrRestart ecosystem.config.js # Assumes you have an ecosystem file
-    become: true
-    become_user: ubuntu
-    args:
-      chdir: ~/backend-app # Ensure commands run relative to the app directory
-      executable: /bin/bash # Ensures the script runs in a bash shell
-    environment:
-      HOME: /home/ubuntu
-      PM2_HOME: /home/ubuntu/.pm2 # Explicitly set PM2_HOME
-      # PATH could be augmented here if needed, e.g., PATH: "/usr/local/bin:{{ ansible_env.PATH }}"
-      # but usually global npm installs are added to a standard location in user's PATH.
-    register: execute_node
+- name: Print PM2 start/restart message
+  ansible.builtin.debug:
+    msg: "{{ execute_node.stdout_lines }}"
 
-  - name: print message
-    ansible.builtin.debug:
-      msg: "{{ execute_node.stdout_lines }}"
+- name: Configure pm2 to start as service on system boot
+  become: true # Run as root
+  ansible.builtin.shell: |
+    set -e
+    # This script needs to be run as root for 'pm2 startup systemd'.
+    # The '-u ubuntu' flag tells PM2 to generate the service files for the 'ubuntu' user.
+    # Adding /usr/local/bin to PATH as a common location for globally installed npm packages like pm2.
+    export PATH="$PATH:/usr/local/bin"
+    pm2 startup systemd -u ubuntu --hp /home/ubuntu
+  args:
+    executable: /bin/bash # Crucial for 'export' and complex commands
+  register: pm2_startup
+  changed_when: >
+    pm2_startup.stdout is defined and
+    'already setup' not in pm2_startup.stdout and
+    ('systemd detected' in pm2_startup.stdout or
+     '+ Done' in pm2_startup.stdout or
+     'command successfully executed' in pm2_startup.stdout or
+     'successfully set up' in pm2_startup.stdout or
+     'command has been successfully executed' in pm2_startup.stdout)
 
-  - name: Configure pm2 to start as service
-    become: true # Run as root
-    ansible.builtin.shell: |
-      set -e
-      # This script needs to be run as root for 'pm2 startup systemd'
-      # The '-u ubuntu' flag tells PM2 to generate the service files for the 'ubuntu' user.
-      # Ensure pm2 is in root's PATH or provide full path if known.
-      # Adding /usr/local/bin to PATH as a common location for globally installed npm packages.
-      export PATH="$PATH:/usr/local/bin"
-      pm2 startup systemd -u ubuntu --hp /home/ubuntu
-    args:
-      executable: /bin/bash # Crucial for 'export' and complex commands
-    register: pm2_startup
-    changed_when: >
-      pm2_startup.stdout is defined and
-      'already setup' not in pm2_startup.stdout and
-      ('systemd detected' in pm2_startup.stdout or
-       '+ Done' in pm2_startup.stdout or
-       'command successfully executed' in pm2_startup.stdout or
-       'successfully set up' in pm2_startup.stdout) # Broader success check
-
-  - name: Save PM2 process list
-    ansible.builtin.shell: |
-      set -e
-      # Ensure PM2 commands are run as the ubuntu user and save their process list.
-      # Setting HOME and PM2_HOME ensures pm2 operates in the correct context.
-      pm2 save
-    become: true
-    become_user: ubuntu
-    args:
-      executable: /bin/bash
-    environment:
-      HOME: /home/ubuntu
-      PM2_HOME: /home/ubuntu/.pm2 # Explicitly set PM2_HOME for saving correctly
-      # PATH could be augmented here if needed, but 'pm2' should be in user's PATH
-    changed_when: false # `pm2 save` typically exits 0, idempotency handled by PM2 internal state
-# ---
+- name: Save PM2 process list to allow resurrect on reboot
+  ansible.builtin.shell: |
+    set -e
+    # This script runs as 'ubuntu' to save its specific PM2 process list.
+    # HOME and PM2_HOME ensure it saves for the correct user.
+    pm2 save
+  become: true
+  become_user: ubuntu
+  args:
+    executable: /bin/bash
+  environment:
+    HOME: /home/ubuntu
+    PM2_HOME: /home/ubuntu/.pm2 # Explicitly set PM2_HOME for saving correctly
+    # PATH: "/usr/local/bin:{{ ansible_env.PATH }}" # Example if pm2 path issues
+  changed_when: false # `pm2 save` output can vary; idempotency is that list is saved.
+                      # You might refine changed_when based on pm2 save output if desired.
 #   # tasks file for deploy role
 
 #   - name: Creates backend app directory
