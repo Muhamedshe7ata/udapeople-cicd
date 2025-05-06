@@ -23,6 +23,18 @@
           state: present
           update_cache: yes
     become: true # Run as root
+  - name: Test connectivity to NodeSource
+    ansible.builtin.shell: curl -v https://deb.nodesource.com/gpgkey/nodesource.gpg.key
+    register: curl_test_output
+    ignore_errors: true  # Allow playbook to continue even if curl fails
+    become: true # Run as root to ensure consistent permissions/network access
+
+  - name: Show connectivity test output
+    ansible.builtin.debug:
+      msg:
+        - "Curl stdout: {{ curl_test_output.stdout }}"
+        - "Curl stderr: {{ curl_test_output.stderr }}"
+
 
   - block:
       - name: Add NodeSource repository key (Using LTS version)
