@@ -29,20 +29,17 @@
   become_user: ubuntu
   register: nvm_check
 
-- name: Download and install NVM for user 'ubuntu'
-  ansible.builtin.shell: |
-    export NVM_DIR="/home/ubuntu/.nvm"
-    mkdir -p "$NVM_DIR"
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+- name: Download and install NVM for user 'ubuntu' # TEST: single line shell
+  ansible.builtin.shell: echo "TEST - NVM Download and Install placeholder"
   args:
-    executable: /bin/bash
+    executable: /bin/bash # Still good to have if it were a real command
   become: true
   become_user: ubuntu
   environment:
     HOME: /home/ubuntu
   when: not nvm_check.stat.exists
   register: nvm_install_result
-  changed_when: nvm_install_result.stdout is defined and 'already installed' not in nvm_install_result.stdout
+  changed_when: false # Placeholder
 
 - name: Ensure NVM sourcing lines are in .bashrc for user 'ubuntu'
   ansible.builtin.lineinfile:
@@ -75,18 +72,10 @@
   become: true
   become_user: root
 
-# # THIS ENTIRE TASK IS NOW COMMENTED OUT FOR DEBUGGING
+# # THIS ENTIRE TASK IS COMMENTED OUT
 # - name: Install latest LTS Node.js and set as default using NVM for user 'ubuntu'
 #   ansible.builtin.shell: |
 #     echo "This is a parsing test for the NVM install task"
-#     # The actual NVM commands are temporarily commented out
-#     # set -e
-#     # export NVM_DIR="/home/ubuntu/.nvm"
-#     # [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-#     # nvm install --lts
-#     # nvm alias default lts/*
-#     # nvm use default
-#     # echo "NVM setup complete. Node version: $(node -v), NPM version: $(npm -v)"
 #   args:
 #     executable: /bin/bash
 #   become: true
@@ -94,20 +83,11 @@
 #   environment:
 #     HOME: /home/ubuntu
 #     NVM_DIR: /home/ubuntu/.nvm
-#   # NO register
-#   # NO changed_when
 
 # --- End of Node.js Installation Block using NVM ---
 
-- name: Installing Node Dependencies
-  ansible.builtin.shell: |
-    set -e
-    export NVM_DIR="/home/ubuntu/.nvm"
-    # Source NVM to make node and npm available
-    # NOTE: Without the previous NVM install task, this might fail at runtime if Node isn't installed,
-    # but we are testing PARSING first.
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    npm install
+- name: Installing Node Dependencies # TEST: single line shell
+  ansible.builtin.shell: echo "TEST - NPM Install placeholder"
   args:
     executable: /bin/bash
     chdir: ~/backend-app
@@ -117,13 +97,8 @@
     HOME: /home/ubuntu
     NVM_DIR: /home/ubuntu/.nvm
 
-- name: Installing PM2 globally using NVM's Node
-  ansible.builtin.shell: |
-    set -e
-    export NVM_DIR="/home/ubuntu/.nvm"
-    # Source NVM
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    npm install pm2 -g
+- name: Installing PM2 globally using NVM's Node # TEST: single line shell
+  ansible.builtin.shell: echo "TEST - PM2 Global Install placeholder"
   args:
     executable: /bin/bash
   become: true
@@ -131,16 +106,11 @@
   environment:
     HOME: /home/ubuntu
     NVM_DIR: /home/ubuntu/.nvm
-  register: pm2_global_install
-  changed_when: pm2_global_install.stdout is defined and ("added " in pm2_global_install.stdout or "changed " in pm2_global_install.stdout)
+  register: pm2_global_install # Will register echo output
+  changed_when: false # Placeholder
 
-- name: Ensuring app is started/restarted with PM2
-  ansible.builtin.shell: |
-    set -e
-    export NVM_DIR="/home/ubuntu/.nvm"
-    # Source NVM
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    pm2 startOrRestart ecosystem.config.js
+- name: Ensuring app is started/restarted with PM2 # TEST: single line shell
+  ansible.builtin.shell: echo "TEST - PM2 startOrRestart placeholder"
   become: true
   become_user: ubuntu
   args:
@@ -150,57 +120,22 @@
     HOME: /home/ubuntu
     PM2_HOME: /home/ubuntu/.pm2
     NVM_DIR: /home/ubuntu/.nvm
-  register: execute_node
+  register: execute_node # Will register echo output
 
 - name: Print PM2 start/restart message
   ansible.builtin.debug:
-    msg: "{{ execute_node.stdout_lines }}"
+    msg: "{{ execute_node.stdout_lines | default(['No output from placeholder']) }}" # Default if not run
 
-- name: Configure pm2 to start as service on system boot
-  become: true # Run as root
-  ansible.builtin.shell: |
-    set -e
-    export NVM_DIR="/home/ubuntu/.nvm"
-
-    NODE_PATH_CMD="export NVM_DIR='/home/ubuntu/.nvm'; [ -s '$NVM_DIR/nvm.sh' ] && . '$NVM_DIR/nvm.sh'; which node"
-    PM2_PATH_CMD="export NVM_DIR='/home/ubuntu/.nvm'; [ -s '$NVM_DIR/nvm.sh' ] && . '$NVM_DIR/nvm.sh'; which pm2"
-
-    NODE_PATH_UNDER_NVM=$(su - ubuntu -c "$NODE_PATH_CMD")
-    PM2_PATH_UNDER_NVM=$(su - ubuntu -c "$PM2_PATH_CMD")
-
-    if [ -z "$PM2_PATH_UNDER_NVM" ] || [ -z "$NODE_PATH_UNDER_NVM" ]; then
-      echo "Critical: Could not find pm2 or node under NVM for user ubuntu. Cannot setup startup script."
-      # For a parsing test, we don't want this to exit the script if Node/PM2 aren't actually there yet.
-      # In a real run, this exit 1 is important if the commented out task were active.
-      # exit 1 
-      echo "Continuing parsing test despite Node/PM2 potentially not being installed yet."
-    fi
-    
-    echo "Debug: Node path for PM2 startup: $NODE_PATH_UNDER_NVM"
-    echo "Debug: PM2 path for PM2 startup: $PM2_PATH_UNDER_NVM"
-
-    # If PM2_PATH_UNDER_NVM is empty because Node/PM2 aren't installed (due to commented out task),
-    # this command would fail. For parsing, this is fine.
-    env PATH="$PATH:$(dirname "$PM2_PATH_UNDER_NVM"):$(dirname "$NODE_PATH_UNDER_NVM")" "$PM2_PATH_UNDER_NVM" startup systemd -u ubuntu --hp /home/ubuntu
+- name: Configure pm2 to start as service on system boot # TEST: single line shell
+  become: true
+  ansible.builtin.shell: echo "TEST - PM2 startup placeholder"
   args:
     executable: /bin/bash
-  register: pm2_startup
-  changed_when: >
-    pm2_startup.stdout is defined and
-    'already setup' not in pm2_startup.stdout and
-    ('systemd detected' in pm2_startup.stdout or
-     '+ Done' in pm2_startup.stdout or
-     'command successfully executed' in pm2_startup.stdout or
-     'successfully set up' in pm2_startup.stdout or
-     'command has been successfully executed' in pm2_startup.stdout)
+  register: pm2_startup # Will register echo output
+  changed_when: false # Placeholder
 
-- name: Save PM2 process list to allow resurrect on reboot
-  ansible.builtin.shell: |
-    set -e
-    export NVM_DIR="/home/ubuntu/.nvm"
-    # Source NVM
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    pm2 save
+- name: Save PM2 process list to allow resurrect on reboot # TEST: single line shell
+  ansible.builtin.shell: echo "TEST - PM2 save placeholder"
   become: true
   become_user: ubuntu
   args:
