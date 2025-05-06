@@ -90,33 +90,33 @@
   become: true # Become root
 
 # RESTORING THIS TASK CAREFULLY - Stage 1: NVM and Node install
-- name: Install latest LTS Node.js and set as default using NVM for user 'ubuntu'
-  ansible.builtin.shell: |
-    set -e
-    export NVM_DIR="/home/ubuntu/.nvm"
-    # Source NVM
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    # Install the latest LTS version
-    nvm install --lts
-    # Set the installed LTS as the default
-    nvm alias default lts/*
-    # Ensure it's used in current shell
-    nvm use default
-    echo "NVM setup complete. Node version: $(node -v), NPM version: $(npm -v)"
-  args:
-    executable: /bin/bash
-  become: true
-  become_user: ubuntu
-  environment:
-    HOME: /home/ubuntu
-    NVM_DIR: /home/ubuntu/.nvm
-  register: nvm_node_install # Restore register
-  changed_when: "'Now using node' in nvm_node_install.stdout or 'Checksums matched' in nvm_node_install.stdout" # Restore simplified changed_when
+# - name: Install latest LTS Node.js and set as default using NVM for user 'ubuntu'
+#   ansible.builtin.shell: |
+#     set -e
+#     export NVM_DIR="/home/ubuntu/.nvm"
+#     # Source NVM
+#     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+#     # Install the latest LTS version
+#     nvm install --lts
+#     # Set the installed LTS as the default
+#     nvm alias default lts/*
+#     # Ensure it's used in current shell
+#     nvm use default
+#     echo "NVM setup complete. Node version: $(node -v), NPM version: $(npm -v)"
+#   args:
+#     executable: /bin/bash
+#   become: true
+#   become_user: ubuntu
+#   environment:
+#     HOME: /home/ubuntu
+#     NVM_DIR: /home/ubuntu/.nvm
+#   register: nvm_node_install # Restore register
+#   changed_when: "'Now using node' in nvm_node_install.stdout or 'Checksums matched' in nvm_node_install.stdout" # Restore simplified changed_when
 
-- name: Show Node and NPM versions installed via NVM # Restore debug task
-  ansible.builtin.debug:
-    msg: "{{ nvm_node_install.stdout_lines }}"
-# --- End of Node.js Installation Block using NVM ---
+# - name: Show Node and NPM versions installed via NVM # Restore debug task
+#   ansible.builtin.debug:
+#     msg: "{{ nvm_node_install.stdout_lines }}"
+# # --- End of Node.js Installation Block using NVM ---
 
 - name: Installing Node Dependencies
   ansible.builtin.shell: |
@@ -213,7 +213,7 @@
     # Source NVM
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
     pm2 save
-  become: true
+  become: true  
   become_user: ubuntu
   args:
     executable: /bin/bash
