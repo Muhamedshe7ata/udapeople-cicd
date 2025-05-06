@@ -73,13 +73,15 @@
     become: true # Run as root
   # --- End of Node.js Installation Block ---
 
+    # ... (previous tasks like Node.js installation, GPG key, etc., should be as per my prior successful fix)
+
   - name: Installing Node Dependencies
     ansible.builtin.command: # Using command module is often safer for things like npm install
       cmd: npm install
       chdir: ~/backend-app # Runs npm install inside this directory
     become: true # Might be needed depending on global packages/permissions
     become_user: ubuntu # Example: Run npm as the ubuntu user
-    environment: # Pass HOME for npm to find its cache and configs properly
+    environment:
       HOME: /home/ubuntu # Assuming ubuntu user's home directory
 
   - name: Installing PM2 globally
@@ -88,24 +90,26 @@
       global: yes
       state: present
     become: true # Needs to be root to install globally
-    environment: # Also helpful for global npm installs
-      PATH: "/usr/local/bin:/usr/bin:/bin" # Common paths where node/npm might be
+    environment:
+      PATH: "/usr/local/bin:/usr/bin:/bin:/snap/bin" # Common paths where node/npm might be
 
   - name: Ensuring app is started/restarted with PM2
     ansible.builtin.shell: |
       set -e
-      # Using environment variable to ensure pm2 from global install is found
-      # and run pm2 commands as the application user (ubuntu)
-      export PATH=$PATH:/usr/local/bin # Ensure pm2 path is available
+      # Ensure relevant paths are available for the ubuntu user
+      # Default PM2 path will be used if in the user's standard PATH after global install.
+      # Setting HOME and PM2_HOME ensures pm2 operates in the correct context.
       pm2 startOrRestart ecosystem.config.js # Assumes you have an ecosystem file
     become: true
     become_user: ubuntu
     args:
       chdir: ~/backend-app # Ensure commands run relative to the app directory
-      executable: /bin/bash # Ensures the export command works
+      executable: /bin/bash # Ensures the script runs in a bash shell
     environment:
-      HOME: /home/ubuntu # PM2 might need HOME
+      HOME: /home/ubuntu
       PM2_HOME: /home/ubuntu/.pm2 # Explicitly set PM2_HOME
+      # PATH could be augmented here if needed, e.g., PATH: "/usr/local/bin:{{ ansible_env.PATH }}"
+      # but usually global npm installs are added to a standard location in user's PATH.
     register: execute_node
 
   - name: print message
@@ -116,20 +120,28 @@
     become: true # Run as root
     ansible.builtin.shell: |
       set -e
-      export PATH=$PATH:/usr/local/bin # Ensure pm2 path is available for root
-      # The 'env' command before pm2 can help pass the current user's environment
-      # for the pm2 daemon if needed, but generally `pm2 startup` handles user context.
+      # This script needs to be run as root for 'pm2 startup systemd'
+      # The '-u ubuntu' flag tells PM2 to generate the service files for the 'ubuntu' user.
+      # Ensure pm2 is in root's PATH or provide full path if known.
+      # Adding /usr/local/bin to PATH as a common location for globally installed npm packages.
+      export PATH="$PATH:/usr/local/bin"
       pm2 startup systemd -u ubuntu --hp /home/ubuntu
     args:
-      executable: /bin/bash
+      executable: /bin/bash # Crucial for 'export' and complex commands
     register: pm2_startup
-    # More robust check, if pm2 startup already ran, it might not output "systemd detected"
-    # Or it might output that it's already configured. Consider its actual output.
-    changed_when: "'already setup' not in pm2_startup.stdout and 'systemd detected' in pm2_startup.stdout"
+    changed_when: >
+      pm2_startup.stdout is defined and
+      'already setup' not in pm2_startup.stdout and
+      ('systemd detected' in pm2_startup.stdout or
+       '+ Done' in pm2_startup.stdout or
+       'command successfully executed' in pm2_startup.stdout or
+       'successfully set up' in pm2_startup.stdout) # Broader success check
 
   - name: Save PM2 process list
     ansible.builtin.shell: |
-      export PATH=$PATH:/usr/local/bin # Ensure pm2 path is available
+      set -e
+      # Ensure PM2 commands are run as the ubuntu user and save their process list.
+      # Setting HOME and PM2_HOME ensures pm2 operates in the correct context.
       pm2 save
     become: true
     become_user: ubuntu
@@ -138,6 +150,8 @@
     environment:
       HOME: /home/ubuntu
       PM2_HOME: /home/ubuntu/.pm2 # Explicitly set PM2_HOME for saving correctly
+      # PATH could be augmented here if needed, but 'pm2' should be in user's PATH
+    changed_when: false # `pm2 save` typically exits 0, idempotency handled by PM2 internal state
 # ---
 #   # tasks file for deploy role
 
