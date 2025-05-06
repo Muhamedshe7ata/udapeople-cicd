@@ -99,7 +99,6 @@
     HOME: /home/ubuntu # NVM uses HOME
     NVM_DIR: /home/ubuntu/.nvm # Make NVM_DIR explicit for the shell environment
   register: nvm_node_install
-  # SIMPLIFIED changed_when condition to isolate the problem
   changed_when: "'Now using node' in nvm_node_install.stdout or 'Checksums matched' in nvm_node_install.stdout"
 
 - name: Show Node and NPM versions installed via NVM
@@ -185,32 +184,4 @@
     echo "PM2 path under NVM for ubuntu: $PM2_PATH_UNDER_NVM"
 
     # Ensure the directories containing node and pm2 are in the PATH for the pm2 startup command
-    env PATH="$PATH:$(dirname "$PM2_PATH_UNDER_NVM"):$(dirname "$NODE_PATH_UNDER_NVM")" "$PM2_PATH_UNDER_NVM" startup systemd -u ubuntu --hp /home/ubuntu
-  args:
-    executable: /bin/bash
-  register: pm2_startup
-  changed_when: >
-    pm2_startup.stdout is defined and
-    'already setup' not in pm2_startup.stdout and
-    ('systemd detected' in pm2_startup.stdout or
-     '+ Done' in pm2_startup.stdout or
-     'command successfully executed' in pm2_startup.stdout or
-     'successfully set up' in pm2_startup.stdout or
-     'command has been successfully executed' in pm2_startup.stdout)
-
-- name: Save PM2 process list to allow resurrect on reboot
-  ansible.builtin.shell: |
-    set -e
-    export NVM_DIR="/home/ubuntu/.nvm"
-    # Source NVM
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    pm2 save
-  become: true
-  become_user: ubuntu
-  args:
-    executable: /bin/bash
-  environment:
-    HOME: /home/ubuntu
-    PM2_HOME: /home/ubuntu/.pm2
-    NVM_DIR: /home/ubuntu/.nvm
-  changed_when: false
+    env PATH="$PATH:$(dirname "$PM2_PATH_UNDER_NVM"):$(dirname "$NODE_PATH_UNDER_NVM")" "$PM2_PATH_UNDER_NVM" startup systemd -u ubuntu --hp /home
