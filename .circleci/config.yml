@@ -410,19 +410,18 @@ jobs:
           name: Package Backend
           command: |
 
-           
             echo "--- Starting Package Backend Step ---"
             echo "Current directory: $(pwd)"
-            # ---> ADD THIS CHECK <---
             echo "Listing directory contents before cd:"
             ls -la
-            # ---> END OF CHECK <---
             cd backend # This is the line that was failing
             echo "Inside backend/ directory: $(pwd)"
+            echo "Listing contents of backend/ directory to ensure ecosystem.config.js is here:"
+            ls -la # <-- ADD THIS to see if ecosystem.config.js is present
             echo "Running npm run build..."
             npm run build
             echo "Running tar command..."
-            tar -czf artifact.tar.gz dist/* package*
+            tar -czf artifact.tar.gz dist/* package* ecosystem.config.js # <-- THE MODIFIED LINE
             echo "Checking if artifact.tar.gz exists in backend/:"
             ls -la artifact.tar.gz # Check if tar created the file here
             cd ..
