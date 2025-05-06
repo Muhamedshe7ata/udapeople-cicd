@@ -1,6 +1,5 @@
----
   # tasks file for deploy role
-
+---
   - name: Creates backend app directory
     ansible.builtin.file:
       path: ~/backend-app # Make sure this is the correct desired path on the server
@@ -14,107 +13,248 @@
       remote_src: no # Specifies src is on the controller
 
   # --- Block to Install Node.js and npm using Apt ---
-  - name: Install prerequisites (if needed, curl/gnupg usually present on Ubuntu)
-    block:
-      - ansible.builtin.apt:
-          name:
-            - curl
-            - gnupg
-          state: present
-          update_cache: yes
+  - name: Ensure prerequisites for adding HTTPS apt repos are installed
+    ansible.builtin.apt:
+      name:
+        - apt-transport-https # Though usually included with apt now
+        - ca-certificates
+        - curl
+        - gnupg # For gpg --dearmor
+      state: present
+      update_cache: yes
     become: true # Run as root
-  - name: Test connectivity to NodeSource
+
+  - name: Test connectivity to NodeSource (keeping for debug if needed)
     ansible.builtin.shell: curl -v https://deb.nodesource.com/gpgkey/nodesource.gpg.key
     register: curl_test_output
-    ignore_errors: true  # Allow playbook to continue even if curl fails
-    become: true # Run as root to ensure consistent permissions/network access
+    ignore_errors: true
+    become: true
+    changed_when: false # This task doesn't change system state
 
-  - name: Show connectivity test output
+  - name: Show connectivity test output (keeping for debug if needed)
     ansible.builtin.debug:
       msg:
         - "Curl stdout: {{ curl_test_output.stdout }}"
         - "Curl stderr: {{ curl_test_output.stderr }}"
+    when: curl_test_output is defined and (curl_test_output.stdout or curl_test_output.stderr)
 
+  # Step 2 (New): Add NodeSource GPG key securely
+  - name: Add NodeSource GPG key
+    ansible.builtin.shell: |
+      set -e
+      curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | gpg --dearmor -o /etc/apt/trusted.gpg.d/nodesource.gpg
+      chmod 644 /etc/apt/trusted.gpg.d/nodesource.gpg
+    args:
+      creates: /etc/apt/trusted.gpg.d/nodesource.gpg # Makes the task idempotent
+    become: true
+    changed_when: false # Idempotency handled by 'creates'
 
-  - block:
-      - name: Add NodeSource repository key (Using LTS version)
-        ansible.builtin.apt_key:
-          url: https://deb.nodesource.com/gpgkey/nodesource.gpg.key
-          state: present
-    become: true # Run as root
-
+  # Step 3 (Modified): Add NodeSource repository
   - name: Add NodeSource repository (Using LTS version)
     ansible.builtin.apt_repository:
       # If you need a specific version like 18.x, change node_lts.x to node_18.x
-      repo: "deb https://deb.nodesource.com/node_lts.x {{ ansible_distribution_release }} main"
+      repo: "deb [signed-by=/etc/apt/trusted.gpg.d/nodesource.gpg] https://deb.nodesource.com/node_lts.x {{ ansible_distribution_release }} main"
       state: present
-      update_cache: yes
+      update_cache: yes # This will run apt update if the repo is added or changed
     become: true # Run as root
     register: nodesource_repo_added
 
-  - block:
-      - name: Install Node.js and npm (Ensure cache is updated after adding repo)
-        ansible.builtin.apt:
-          name: nodejs # Installing nodejs package from NodeSource repo
-          state: present
-          update_cache: yes # Update again if repo was just added
-    when: nodesource_repo_added.changed # Only update cache again if the repo was actually added
+  # Step 4 (Streamlined): Install Node.js and npm
+  - name: Install Node.js and npm
+    ansible.builtin.apt:
+      name: nodejs # Installing nodejs package from NodeSource repo
+      state: present
+      # No need for update_cache: yes here if apt_repository did it.
+      # However, if nodesource_repo_added was not changed (meaning repo already existed),
+      # an update_cache here might be beneficial, but usually not strictly necessary
+      # if the previous apt_repository ensures it.
+      # To be safe, or if this task could run independently:
+      # update_cache: "{{ nodesource_repo_added.changed }}"
     become: true # Run as root
-
-  - block:
-      - name: Install Node.js and npm (Ensure installed)
-        ansible.builtin.apt:
-          name: nodejs
-          state: present
-    become: true
   # --- End of Node.js Installation Block ---
 
-  - block:
-      - name: Installing Node Dependencies
-        ansible.builtin.command: # Using command module is often safer for things like npm install
-          cmd: npm install
-          chdir: ~/backend-app # Runs npm install inside this directory
-        become: true # Might be needed depending on global packages/permissions
-        become_user: ubuntu # Example: Run npm as the ubuntu user
+  - name: Installing Node Dependencies
+    ansible.builtin.command: # Using command module is often safer for things like npm install
+      cmd: npm install
+      chdir: ~/backend-app # Runs npm install inside this directory
+    become: true # Might be needed depending on global packages/permissions
+    become_user: ubuntu # Example: Run npm as the ubuntu user
+    environment: # Pass HOME for npm to find its cache and configs properly
+      HOME: /home/ubuntu # Assuming ubuntu user's home directory
 
-  - block:
-      - name: Installing PM2 globally
-        ansible.builtin.npm:
-          name: pm2
-          global: yes
-          state: present
+  - name: Installing PM2 globally
+    ansible.builtin.npm:
+      name: pm2
+      global: yes
+      state: present
     become: true # Needs to be root to install globally
+    environment: # Also helpful for global npm installs
+      PATH: "/usr/local/bin:/usr/bin:/bin" # Common paths where node/npm might be
 
-  # Using shell because pm2 might not be in root's PATH immediately
   - name: Ensuring app is started/restarted with PM2
     ansible.builtin.shell: |
-      cd ~/backend-app # Navigate to app directory first
-      # Use the full path to pm2 found by 'which pm2' if needed, e.g., /usr/local/bin/pm2 or /usr/bin/pm2
-      # Run pm2 commands as the application user (ubuntu)
+      set -e
+      # Using environment variable to ensure pm2 from global install is found
+      # and run pm2 commands as the application user (ubuntu)
+      export PATH=$PATH:/usr/local/bin # Ensure pm2 path is available
       pm2 startOrRestart ecosystem.config.js # Assumes you have an ecosystem file
     become: true
-    become_user: ubuntu # Run pm2 as ubuntu user
+    become_user: ubuntu
     args:
       chdir: ~/backend-app # Ensure commands run relative to the app directory
+      executable: /bin/bash # Ensures the export command works
+    environment:
+      HOME: /home/ubuntu # PM2 might need HOME
+      PM2_HOME: /home/ubuntu/.pm2 # Explicitly set PM2_HOME
     register: execute_node
 
   - name: print message
     ansible.builtin.debug:
       msg: "{{ execute_node.stdout_lines }}"
 
-  # Ensure pm2 startup script is configured
   - name: Configure pm2 to start as service
     become: true # Run as root
     ansible.builtin.shell: |
-      # Again, ensure full path to pm2 is used if needed. Running as root here for setup.
+      set -e
+      export PATH=$PATH:/usr/local/bin # Ensure pm2 path is available for root
+      # The 'env' command before pm2 can help pass the current user's environment
+      # for the pm2 daemon if needed, but generally `pm2 startup` handles user context.
       pm2 startup systemd -u ubuntu --hp /home/ubuntu
+    args:
+      executable: /bin/bash
     register: pm2_startup
-    changed_when: "'systemd detected' in pm2_startup.stdout" # Rough check if command did something
+    # More robust check, if pm2 startup already ran, it might not output "systemd detected"
+    # Or it might output that it's already configured. Consider its actual output.
+    changed_when: "'already setup' not in pm2_startup.stdout and 'systemd detected' in pm2_startup.stdout"
 
   - name: Save PM2 process list
-    ansible.builtin.shell: pm2 save
+    ansible.builtin.shell: |
+      export PATH=$PATH:/usr/local/bin # Ensure pm2 path is available
+      pm2 save
     become: true
-    become_user: ubuntu # Save the list belonging to the ubuntu user
+    become_user: ubuntu
+    args:
+      executable: /bin/bash
+    environment:
+      HOME: /home/ubuntu
+      PM2_HOME: /home/ubuntu/.pm2 # Explicitly set PM2_HOME for saving correctly
+# ---
+#   # tasks file for deploy role
+
+#   - name: Creates backend app directory
+#     ansible.builtin.file:
+#       path: ~/backend-app # Make sure this is the correct desired path on the server
+#       state: directory
+#       mode: '0755' # Set appropriate permissions
+
+#   - name: Unarchive backend files
+#     ansible.builtin.unarchive:
+#       src: artifact.tar.gz # Assuming this is in roles/deploy/files on the controller
+#       dest: ~/backend-app # The directory created above
+#       remote_src: no # Specifies src is on the controller
+
+#   # --- Block to Install Node.js and npm using Apt ---
+#   - name: Install prerequisites (if needed, curl/gnupg usually present on Ubuntu)
+#     block:
+#       - ansible.builtin.apt:
+#           name:
+#             - curl
+#             - gnupg
+#           state: present
+#           update_cache: yes
+#     become: true # Run as root
+#   - name: Test connectivity to NodeSource
+#     ansible.builtin.shell: curl -v https://deb.nodesource.com/gpgkey/nodesource.gpg.key
+#     register: curl_test_output
+#     ignore_errors: true  # Allow playbook to continue even if curl fails
+#     become: true # Run as root to ensure consistent permissions/network access
+
+#   - name: Show connectivity test output
+#     ansible.builtin.debug:
+#       msg:
+#         - "Curl stdout: {{ curl_test_output.stdout }}"
+#         - "Curl stderr: {{ curl_test_output.stderr }}"
+
+
+#   - block:
+#       - name: Add NodeSource repository key (Using LTS version)
+#         ansible.builtin.apt_key:
+#           url: https://deb.nodesource.com/gpgkey/nodesource.gpg.key
+#           state: present
+#     become: true # Run as root
+
+#   - name: Add NodeSource repository (Using LTS version)
+#     ansible.builtin.apt_repository:
+#       # If you need a specific version like 18.x, change node_lts.x to node_18.x
+#       repo: "deb https://deb.nodesource.com/node_lts.x {{ ansible_distribution_release }} main"
+#       state: present
+#       update_cache: yes
+#     become: true # Run as root
+#     register: nodesource_repo_added
+
+#   - block:
+#       - name: Install Node.js and npm (Ensure cache is updated after adding repo)
+#         ansible.builtin.apt:
+#           name: nodejs # Installing nodejs package from NodeSource repo
+#           state: present
+#           update_cache: yes # Update again if repo was just added
+#     when: nodesource_repo_added.changed # Only update cache again if the repo was actually added
+#     become: true # Run as root
+
+#   - block:
+#       - name: Install Node.js and npm (Ensure installed)
+#         ansible.builtin.apt:
+#           name: nodejs
+#           state: present
+#     become: true
+#   # --- End of Node.js Installation Block ---
+
+#   - block:
+#       - name: Installing Node Dependencies
+#         ansible.builtin.command: # Using command module is often safer for things like npm install
+#           cmd: npm install
+#           chdir: ~/backend-app # Runs npm install inside this directory
+#         become: true # Might be needed depending on global packages/permissions
+#         become_user: ubuntu # Example: Run npm as the ubuntu user
+
+#   - block:
+#       - name: Installing PM2 globally
+#         ansible.builtin.npm:
+#           name: pm2
+#           global: yes
+#           state: present
+#     become: true # Needs to be root to install globally
+
+#   # Using shell because pm2 might not be in root's PATH immediately
+#   - name: Ensuring app is started/restarted with PM2
+#     ansible.builtin.shell: |
+#       cd ~/backend-app # Navigate to app directory first
+#       # Use the full path to pm2 found by 'which pm2' if needed, e.g., /usr/local/bin/pm2 or /usr/bin/pm2
+#       # Run pm2 commands as the application user (ubuntu)
+#       pm2 startOrRestart ecosystem.config.js # Assumes you have an ecosystem file
+#     become: true
+#     become_user: ubuntu # Run pm2 as ubuntu user
+#     args:
+#       chdir: ~/backend-app # Ensure commands run relative to the app directory
+#     register: execute_node
+
+#   - name: print message
+#     ansible.builtin.debug:
+#       msg: "{{ execute_node.stdout_lines }}"
+
+#   # Ensure pm2 startup script is configured
+#   - name: Configure pm2 to start as service
+#     become: true # Run as root
+#     ansible.builtin.shell: |
+#       # Again, ensure full path to pm2 is used if needed. Running as root here for setup.
+#       pm2 startup systemd -u ubuntu --hp /home/ubuntu
+#     register: pm2_startup
+#     changed_when: "'systemd detected' in pm2_startup.stdout" # Rough check if command did something
+
+#   - name: Save PM2 process list
+#     ansible.builtin.shell: pm2 save
+#     become: true
+#     become_user: ubuntu # Save the list belonging to the ubuntu user
 # ---
 # - name: "Creates backend app directory"
 #   file:
