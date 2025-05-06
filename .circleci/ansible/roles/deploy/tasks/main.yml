@@ -89,22 +89,18 @@
   become_user: root
 
 - name: Install latest LTS Node.js and set as default using NVM for user 'ubuntu'
-  ansible.builtin.shell: |
+  become: true
+  become_user: ubuntu
+  shell: |
     set -e
     export NVM_DIR="/home/ubuntu/.nvm"
-    # Source NVM
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    # Install the latest LTS version
     nvm install --lts
-    # Set the installed LTS as the default
     nvm alias default lts/*
-    # Ensure it's used in current shell
-    nvm use default # This should make 'node' and 'npm' available on PATH for this script
+    nvm use default
     echo "NVM setup complete. Node version: $(node -v), NPM version: $(npm -v)"
   args:
     executable: /bin/bash
-  become: true
-  become_user: ubuntu
   environment:
     HOME: /home/ubuntu
     NVM_DIR: /home/ubuntu/.nvm
@@ -226,4 +222,3 @@
     NVM_DIR: /home/ubuntu/.nvm
   changed_when: false
 
-  
