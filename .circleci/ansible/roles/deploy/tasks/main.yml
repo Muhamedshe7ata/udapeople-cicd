@@ -41,7 +41,9 @@
 - name: Add NodeSource GPG key
   ansible.builtin.shell: |
     set -e
+    # Download the NodeSource GPG key, dearmor it, and save it
     curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | gpg --dearmor -o /etc/apt/trusted.gpg.d/nodesource.gpg
+    # Set appropriate permissions for the GPG key file
     chmod 644 /etc/apt/trusted.gpg.d/nodesource.gpg
   args:
     creates: /etc/apt/trusted.gpg.d/nodesource.gpg # Makes the task idempotent
@@ -49,10 +51,10 @@
   become: true
   changed_when: false # Idempotency handled by 'creates'
 
-- name: Add NodeSource repository (Using LTS version)
+- name: Add NodeSource repository (Node.js 20.x LTS for compatibility with new OS releases)
   ansible.builtin.apt_repository:
-    # If you need a specific version like 18.x, change node_lts.x to node_18.x
-    repo: "deb [signed-by=/etc/apt/trusted.gpg.d/nodesource.gpg] https://deb.nodesource.com/node_lts.x {{ ansible_distribution_release }} main"
+    # Switched from node_lts.x to node_20.x (current LTS) as node_lts.x might not support "noble" yet
+    repo: "deb [signed-by=/etc/apt/trusted.gpg.d/nodesource.gpg] https://deb.nodesource.com/node_20.x {{ ansible_distribution_release }} main"
     state: present
     update_cache: yes # This will run apt update if the repo is added or changed
   become: true # Run as root
@@ -60,7 +62,7 @@
 
 - name: Install Node.js and npm
   ansible.builtin.apt:
-    name: nodejs # Installing nodejs package from NodeSource repo
+    name: nodejs # Installing nodejs package (Node.js 20.x if repo above works)
     state: present
   become: true # Run as root
 # --- End of Node.js Installation Block ---
@@ -89,7 +91,7 @@
     set -e
     # This script runs as the 'ubuntu' user due to become_user.
     # HOME and PM2_HOME ensure pm2 uses the correct directories for this user.
-    # Assumes 'ecosystem.config.js' is in '~/backend-app'.
+    # Assumes 'ecosystem.config.js' is in '~/backend-app' (the chdir directory).
     pm2 startOrRestart ecosystem.config.js
   become: true
   become_user: ubuntu
@@ -116,6 +118,7 @@
     # The '-u ubuntu' flag tells PM2 to generate the service files for the 'ubuntu' user.
     # Adding /usr/local/bin to PATH as a common location for globally installed npm packages like pm2.
     export PATH="$PATH:/usr/local/bin"
+    # Generate and enable the systemd startup script for PM2 managed by the ubuntu user.
     pm2 startup systemd -u ubuntu --hp /home/ubuntu
   args:
     executable: /bin/bash # Crucial for 'export' and complex commands
@@ -144,6 +147,9 @@
     PM2_HOME: /home/ubuntu/.pm2 # Explicitly set PM2_HOME for saving correctly
     # PATH: "/usr/local/bin:{{ ansible_env.PATH }}" # Example if pm2 path issues
   changed_when: false # `pm2 save` output can vary; idempotency is that list is saved.
+
+
+
                       # You might refine changed_when based on pm2 save output if desired.
 #   # tasks file for deploy role
 
