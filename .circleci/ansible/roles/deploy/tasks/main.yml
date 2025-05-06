@@ -12,98 +12,144 @@
     dest: ~/backend-app # The directory created above
     remote_src: no # Specifies src is on the controller
 
-# --- Block to Install Node.js and npm using Apt ---
-- name: Ensure prerequisites for adding HTTPS apt repos are installed
+# --- Block to Install Node.js and npm using NVM (Node Version Manager) ---
+- name: Ensure prerequisites for NVM and building Node.js (curl, build-essential)
   ansible.builtin.apt:
     name:
-      - apt-transport-https
-      - ca-certificates
       - curl
-      - gnupg # For gpg --dearmor
+      - build-essential # Needed if NVM installs from source, good to have
     state: present
     update_cache: yes
   become: true # Run as root
 
-- name: Test connectivity to NodeSource (optional debug)
-  ansible.builtin.shell: curl -v https://deb.nodesource.com/gpgkey/nodesource.gpg.key
-  register: curl_test_output
-  ignore_errors: true
+# Install NVM for the 'ubuntu' user
+- name: Check if NVM is already installed for user 'ubuntu'
+  ansible.builtin.stat:
+    path: /home/ubuntu/.nvm/nvm.sh
   become: true
-  changed_when: false # This task doesn't change system state
+  become_user: ubuntu # Check as ubuntu user
+  register: nvm_check
 
-- name: Show connectivity test output (optional debug)
-  ansible.builtin.debug:
-    msg:
-      - "Curl stdout: {{ curl_test_output.stdout }}"
-      - "Curl stderr: {{ curl_test_output.stderr }}"
-  when: curl_test_output is defined and (curl_test_output.stdout or curl_test_output.stderr)
+- name: Download and install NVM for user 'ubuntu'
+  ansible.builtin.shell: |
+    # Fetch the latest NVM version and install
+    export NVM_DIR="/home/ubuntu/.nvm"
+    mkdir -p "$NVM_DIR"
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+  args:
+    executable: /bin/bash
+    # creates: /home/ubuntu/.nvm/nvm.sh # Handled by nvm_check and when condition
+  become: true
+  become_user: ubuntu # Run installer as ubuntu user
+  environment:
+    HOME: /home/ubuntu # NVM installer uses HOME
+  when: not nvm_check.stat.exists
+  register: nvm_install_result
+  changed_when: "'already installed' not in nvm_install_result.stdout_lines | join(' ')" # Be more specific if possible
 
-- name: Add NodeSource GPG key
+- name: Ensure NVM sourcing lines are in .bashrc for user 'ubuntu'
+  ansible.builtin.lineinfile:
+    path: /home/ubuntu/.bashrc
+    regexp: '^export NVM_DIR="\$HOME\/\.nvm"$'
+    line: 'export NVM_DIR="$HOME/.nvm"'
+    state: present
+    create: yes # Create .bashrc if it doesn't exist
+    owner: ubuntu
+    group: ubuntu
+    mode: '0644'
+  become: true # To manage file owned by root initially or if ubuntu can't write
+  become_user: root # Ensure we can write to ubuntu's .bashrc if needed
+
+- name: Add NVM script sourcing to .bashrc for user 'ubuntu'
+  ansible.builtin.lineinfile:
+    path: /home/ubuntu/.bashrc
+    line: '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm'
+    state: present
+  become: true
+  become_user: root
+
+- name: Add NVM bash completion sourcing to .bashrc for user 'ubuntu'
+  ansible.builtin.lineinfile:
+    path: /home/ubuntu/.bashrc
+    line: '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion'
+    state: present
+  become: true
+  become_user: root
+
+- name: Install latest LTS Node.js and set as default using NVM for user 'ubuntu'
   ansible.builtin.shell: |
     set -e
-    # Download the NodeSource GPG key, dearmor it, and save it
-    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | gpg --dearmor -o /etc/apt/trusted.gpg.d/nodesource.gpg
-    # Set appropriate permissions for the GPG key file
-    chmod 644 /etc/apt/trusted.gpg.d/nodesource.gpg
+    export NVM_DIR="/home/ubuntu/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # Source NVM
+    nvm install --lts       # Install the latest LTS version
+    nvm alias default lts/* # Set the installed LTS as the default
+    nvm use default         # Ensure it's used in current shell for subsequent tasks if needed by same shell
+    echo "Node version: $(node -v)"
+    echo "NPM version: $(npm -v)"
   args:
-    creates: /etc/apt/trusted.gpg.d/nodesource.gpg # Makes the task idempotent
-    executable: /bin/bash # Good practice for multi-line shell with set -e
+    executable: /bin/bash
+    # chdir: /home/ubuntu # Not strictly needed here but doesn't hurt
   become: true
-  changed_when: false # Idempotency handled by 'creates'
+  become_user: ubuntu # Run NVM commands as the ubuntu user
+  environment:
+    HOME: /home/ubuntu # NVM uses HOME
+    NVM_DIR: /home/ubuntu/.nvm # Make NVM_DIR explicit for the shell environment
+  register: nvm_node_install
+  changed_when: "'is already installed' not in nvm_node_install.stdout" # Only changed if node was actually installed
 
-- name: Add NodeSource repository (Node.js 20.x LTS for compatibility with new OS releases)
-  ansible.builtin.apt_repository:
-    # Switched from node_lts.x to node_20.x (current LTS) as node_lts.x might not support "noble" yet
-    repo: "deb [signed-by=/etc/apt/trusted.gpg.d/nodesource.gpg] https://deb.nodesource.com/node_20.x {{ ansible_distribution_release }} main"
-    state: present
-    update_cache: yes # This will run apt update if the repo is added or changed
-  become: true # Run as root
-  register: nodesource_repo_added
-
-- name: Install Node.js and npm
-  ansible.builtin.apt:
-    name: nodejs # Installing nodejs package (Node.js 20.x if repo above works)
-    state: present
-  become: true # Run as root
-# --- End of Node.js Installation Block ---
+- name: Show Node and NPM versions installed via NVM
+  ansible.builtin.debug:
+    msg: "{{ nvm_node_install.stdout_lines }}"
+# --- End of Node.js Installation Block using NVM ---
 
 - name: Installing Node Dependencies
-  ansible.builtin.command: # Using command module is often safer for things like npm install
-    cmd: npm install
+  ansible.builtin.shell: | # Switched to shell to ensure NVM environment is sourced
+    set -e
+    export NVM_DIR="/home/ubuntu/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # Source NVM
+    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+    npm install
+  args:
+    executable: /bin/bash
     chdir: ~/backend-app # Runs npm install inside this directory
   become: true
   become_user: ubuntu # Example: Run npm as the ubuntu user
   environment:
     HOME: /home/ubuntu # Assuming ubuntu user's home directory
+    NVM_DIR: /home/ubuntu/.nvm
 
-- name: Installing PM2 globally
-  ansible.builtin.npm:
-    name: pm2
-    global: yes
-    state: present
-  become: true # Needs to be root to install globally
+- name: Installing PM2 globally using NVM's Node
+  ansible.builtin.shell: | # Switched to shell to ensure NVM environment
+    set -e
+    export NVM_DIR="/home/ubuntu/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+    npm install pm2 -g
+  args:
+    executable: /bin/bash
+  become: true # Although npm -g is run as ubuntu, some systems might be picky if root creates NVM path initially
+  become_user: ubuntu # Install PM2 globally for the Node.js managed by NVM for this user
   environment:
-    # Common paths where node/npm binaries get installed
-    PATH: "/usr/local/bin:/usr/bin:/bin:/snap/bin:{{ ansible_env.PATH }}"
+    HOME: /home/ubuntu
+    NVM_DIR: /home/ubuntu/.nvm
 
 - name: Ensuring app is started/restarted with PM2
   ansible.builtin.shell: |
     set -e
-    # This script runs as the 'ubuntu' user due to become_user.
-    # HOME and PM2_HOME ensure pm2 uses the correct directories for this user.
-    # Assumes 'ecosystem.config.js' is in '~/backend-app' (the chdir directory).
+    export NVM_DIR="/home/ubuntu/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+    # The NVM sourced shell should put the correct pm2 in PATH
     pm2 startOrRestart ecosystem.config.js
   become: true
   become_user: ubuntu
   args:
-    chdir: ~/backend-app # Ensure commands run relative to the app directory
-    executable: /bin/bash # Ensures the script runs in a bash shell
+    chdir: ~/backend-app
+    executable: /bin/bash
   environment:
     HOME: /home/ubuntu
-    PM2_HOME: /home/ubuntu/.pm2 # Explicitly set PM2_HOME
-    # Augment PATH if pm2 is in a non-standard location for the ubuntu user,
-    # though global npm installs often land in a standard part of the PATH.
-    # PATH: "/usr/local/bin:{{ ansible_env.PATH }}" # Example if needed
+    PM2_HOME: /home/ubuntu/.pm2
+    NVM_DIR: /home/ubuntu/.nvm
   register: execute_node
 
 - name: Print PM2 start/restart message
@@ -111,17 +157,28 @@
     msg: "{{ execute_node.stdout_lines }}"
 
 - name: Configure pm2 to start as service on system boot
-  become: true # Run as root
+  become: true # Run as root for systemd setup
   ansible.builtin.shell: |
     set -e
-    # This script needs to be run as root for 'pm2 startup systemd'.
-    # The '-u ubuntu' flag tells PM2 to generate the service files for the 'ubuntu' user.
-    # Adding /usr/local/bin to PATH as a common location for globally installed npm packages like pm2.
-    export PATH="$PATH:/usr/local/bin"
-    # Generate and enable the systemd startup script for PM2 managed by the ubuntu user.
-    pm2 startup systemd -u ubuntu --hp /home/ubuntu
+    export NVM_DIR="/home/ubuntu/.nvm"
+    # To find pm2 installed under NVM for the ubuntu user, root needs the PATH
+    # that NVM's pm2 was installed into. The `pm2 startup` command also
+    # needs to know where node is. NVM's node isn't typically on root's default path.
+    # The `-u ubuntu` should handle context, but pm2 and node paths can be tricky.
+    # A common path for NVM's globally installed binaries:
+    NODE_PATH_UNDER_NVM=$(su - ubuntu -c 'export NVM_DIR="/home/ubuntu/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && which node')
+    PM2_PATH_UNDER_NVM=$(su - ubuntu -c 'export NVM_DIR="/home/ubuntu/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && which pm2')
+
+    if [ -z "$PM2_PATH_UNDER_NVM" ] || [ -z "$NODE_PATH_UNDER_NVM" ]; then
+      echo "Could not find pm2 or node under NVM for user ubuntu. Cannot setup startup script."
+      exit 1
+    fi
+    
+    # Execute pm2 startup with the specific path to PM2 found under NVM
+    # This tells systemd where to find pm2 for the ubuntu user.
+    env PATH=$PATH:$(dirname $PM2_PATH_UNDER_NVM):$(dirname $NODE_PATH_UNDER_NVM) $PM2_PATH_UNDER_NVM startup systemd -u ubuntu --hp /home/ubuntu
   args:
-    executable: /bin/bash # Crucial for 'export' and complex commands
+    executable: /bin/bash
   register: pm2_startup
   changed_when: >
     pm2_startup.stdout is defined and
@@ -135,8 +192,9 @@
 - name: Save PM2 process list to allow resurrect on reboot
   ansible.builtin.shell: |
     set -e
-    # This script runs as 'ubuntu' to save its specific PM2 process list.
-    # HOME and PM2_HOME ensure it saves for the correct user.
+    export NVM_DIR="/home/ubuntu/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
     pm2 save
   become: true
   become_user: ubuntu
@@ -144,214 +202,6 @@
     executable: /bin/bash
   environment:
     HOME: /home/ubuntu
-    PM2_HOME: /home/ubuntu/.pm2 # Explicitly set PM2_HOME for saving correctly
-    # PATH: "/usr/local/bin:{{ ansible_env.PATH }}" # Example if pm2 path issues
-  changed_when: false # `pm2 save` output can vary; idempotency is that list is saved.
-
-
-
-                      # You might refine changed_when based on pm2 save output if desired.
-#   # tasks file for deploy role
-
-#   - name: Creates backend app directory
-#     ansible.builtin.file:
-#       path: ~/backend-app # Make sure this is the correct desired path on the server
-#       state: directory
-#       mode: '0755' # Set appropriate permissions
-
-#   - name: Unarchive backend files
-#     ansible.builtin.unarchive:
-#       src: artifact.tar.gz # Assuming this is in roles/deploy/files on the controller
-#       dest: ~/backend-app # The directory created above
-#       remote_src: no # Specifies src is on the controller
-
-#   # --- Block to Install Node.js and npm using Apt ---
-#   - name: Install prerequisites (if needed, curl/gnupg usually present on Ubuntu)
-#     block:
-#       - ansible.builtin.apt:
-#           name:
-#             - curl
-#             - gnupg
-#           state: present
-#           update_cache: yes
-#     become: true # Run as root
-#   - name: Test connectivity to NodeSource
-#     ansible.builtin.shell: curl -v https://deb.nodesource.com/gpgkey/nodesource.gpg.key
-#     register: curl_test_output
-#     ignore_errors: true  # Allow playbook to continue even if curl fails
-#     become: true # Run as root to ensure consistent permissions/network access
-
-#   - name: Show connectivity test output
-#     ansible.builtin.debug:
-#       msg:
-#         - "Curl stdout: {{ curl_test_output.stdout }}"
-#         - "Curl stderr: {{ curl_test_output.stderr }}"
-
-
-#   - block:
-#       - name: Add NodeSource repository key (Using LTS version)
-#         ansible.builtin.apt_key:
-#           url: https://deb.nodesource.com/gpgkey/nodesource.gpg.key
-#           state: present
-#     become: true # Run as root
-
-#   - name: Add NodeSource repository (Using LTS version)
-#     ansible.builtin.apt_repository:
-#       # If you need a specific version like 18.x, change node_lts.x to node_18.x
-#       repo: "deb https://deb.nodesource.com/node_lts.x {{ ansible_distribution_release }} main"
-#       state: present
-#       update_cache: yes
-#     become: true # Run as root
-#     register: nodesource_repo_added
-
-#   - block:
-#       - name: Install Node.js and npm (Ensure cache is updated after adding repo)
-#         ansible.builtin.apt:
-#           name: nodejs # Installing nodejs package from NodeSource repo
-#           state: present
-#           update_cache: yes # Update again if repo was just added
-#     when: nodesource_repo_added.changed # Only update cache again if the repo was actually added
-#     become: true # Run as root
-
-#   - block:
-#       - name: Install Node.js and npm (Ensure installed)
-#         ansible.builtin.apt:
-#           name: nodejs
-#           state: present
-#     become: true
-#   # --- End of Node.js Installation Block ---
-
-#   - block:
-#       - name: Installing Node Dependencies
-#         ansible.builtin.command: # Using command module is often safer for things like npm install
-#           cmd: npm install
-#           chdir: ~/backend-app # Runs npm install inside this directory
-#         become: true # Might be needed depending on global packages/permissions
-#         become_user: ubuntu # Example: Run npm as the ubuntu user
-
-#   - block:
-#       - name: Installing PM2 globally
-#         ansible.builtin.npm:
-#           name: pm2
-#           global: yes
-#           state: present
-#     become: true # Needs to be root to install globally
-
-#   # Using shell because pm2 might not be in root's PATH immediately
-#   - name: Ensuring app is started/restarted with PM2
-#     ansible.builtin.shell: |
-#       cd ~/backend-app # Navigate to app directory first
-#       # Use the full path to pm2 found by 'which pm2' if needed, e.g., /usr/local/bin/pm2 or /usr/bin/pm2
-#       # Run pm2 commands as the application user (ubuntu)
-#       pm2 startOrRestart ecosystem.config.js # Assumes you have an ecosystem file
-#     become: true
-#     become_user: ubuntu # Run pm2 as ubuntu user
-#     args:
-#       chdir: ~/backend-app # Ensure commands run relative to the app directory
-#     register: execute_node
-
-#   - name: print message
-#     ansible.builtin.debug:
-#       msg: "{{ execute_node.stdout_lines }}"
-
-#   # Ensure pm2 startup script is configured
-#   - name: Configure pm2 to start as service
-#     become: true # Run as root
-#     ansible.builtin.shell: |
-#       # Again, ensure full path to pm2 is used if needed. Running as root here for setup.
-#       pm2 startup systemd -u ubuntu --hp /home/ubuntu
-#     register: pm2_startup
-#     changed_when: "'systemd detected' in pm2_startup.stdout" # Rough check if command did something
-
-#   - name: Save PM2 process list
-#     ansible.builtin.shell: pm2 save
-#     become: true
-#     become_user: ubuntu # Save the list belonging to the ubuntu user
-# ---
-# - name: "Creates backend app directory"
-#   file:
-#     path: ~/backend-app
-#     state: directory
-
-# - name: "Unarchive backend files"
-#   unarchive:
-#     src: artifact.tar.gz
-#     dest: ~/backend-app
-# - name: Install default Node.js and npm (Apt)
-#   block:
-#     - ansible.builtin.apt:
-#         name:
-#           - nodejs
-#           - npm
-#         state: present
-#         update_cache: yes
-#         become: yes
-# - name: "Installing Node Dependencies"
-#   shell: |
-#     cd ~/backend-app
-#     npm i
-
-# - name: "Executing Node app with PM2"
-#   shell: |
-#     cd ~/backend-app/src
-#     pm2 stop default
-#     pm2 start main.js
-#   register: execute_node
-
-# - name: print message
-#   debug:
-#     msg: "{{ execute_node.stdout_lines }}"
-
-# - name: "Configure pm2 to start as service"
-#   become: true
-#   shell: |
-#     env PATH=$PATH:/usr/local/bin pm2 startup systemd -u ubuntu --hp /home/ubuntu
-
-# ---
-# - name: "Creates backend app directory"
-#   file:
-#     path: /home/ubuntu/backend-app
-#     state: directory
-#     owner: ubuntu
-#     group: ubuntu
-
-# - name: "Unarchive backend files"
-#   unarchive:
-#     src: artifact.tar.gz
-#     dest: /home/ubuntu/backend-app
-#     owner: ubuntu
-#     group: ubuntu
-
-# - name: "Installing Node Production Dependencies"
-#   shell: npm ci
-#   args:
-#     chdir: /home/ubuntu/backend-app
-#   environment:
-#      NODE_ENV: production
-
-# - name: "Ensure Node app is running with PM2"
-#   shell: pm2 startOrRestart main.js --name backend-app --env production
-#   args:
-#     chdir: /home/ubuntu/backend-app/dist
-#   register: execute_node
-#   environment:
-#      NODE_ENV: production
-
-# - name: "Print PM2 execution message"
-#   debug:
-#     msg: "{{ execute_node.stdout_lines }}"
-#   when: execute_node is defined
-
-# - name: "Configure PM2 to start on boot for user ubuntu"
-#   become: true
-#   shell: env PATH=$PATH:/usr/local/bin pm2 startup systemd -u ubuntu --hp /home/ubuntu
-#   register: pm2_startup_output
-#   changed_when: "'systemd already setup' not in pm2_startup_output.stdout"
-
-# - name: "Save current PM2 process list for startup"
-#   shell: pm2 save
-#   args:
-#     chdir: /home/ubuntu/backend-app
-#   become: false
-#   register: pm2_save_output
-#   changed_when: "'successfully saved' in pm2_save_output.stdout"
+    PM2_HOME: /home/ubuntu/.pm2
+    NVM_DIR: /home/ubuntu/.nvm
+  changed_when: false
