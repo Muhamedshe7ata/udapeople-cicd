@@ -2,23 +2,19 @@
 ---
 - name: Creates backend app directory for ubuntu user
   ansible.builtin.file:
-    path: /home/ubuntu/backend-app # Use absolute path for clarity
+    path: /home/ubuntu/backend-app
     state: directory
-    owner: ubuntu # Ensure ubuntu owns it
-    group: ubuntu # Ensure ubuntu group
+    owner: ubuntu
+    group: ubuntu
     mode: '0755'
-  become: true # May need to be root to create dir in /home/ubuntu if initial user isn't ubuntu
+  become: true
 
 - name: Unarchive backend files into ubuntu user's backend-app directory
   ansible.builtin.unarchive:
     src: artifact.tar.gz
-    dest: /home/ubuntu/backend-app # Use absolute path
+    dest: /home/ubuntu/backend-app
     remote_src: no
-    # Ensure permissions allow ubuntu user to read/write after unarchiving
-    # by default, unarchive preserves permissions from tar. If those are root, ubuntu can't use them.
-    # common_opts: --no-same-owner --no-same-permissions (if needed, check your artifact)
-    # Alternatively, chown task afterwards:
-  become: true # To write to /home/ubuntu/backend-app
+  become: true
 
 - name: Ensure correct ownership of unarchived backend files
   ansible.builtin.file:
@@ -27,7 +23,7 @@
     recurse: yes
     owner: ubuntu
     group: ubuntu
-  become: true # Root needed to change ownership
+  become: true
 
 # --- Block to Install Node.js and npm using NVM (Node Version Manager) ---
 - name: Ensure prerequisites for NVM and building Node.js (curl, build-essential)
@@ -71,7 +67,8 @@
     owner: ubuntu
     group: ubuntu
     mode: '0644'
-  become: true # Become root to manage file owned by another user
+  become: true
+  become_user: root
 
 - name: Add NVM script sourcing to .bashrc for user 'ubuntu'
   ansible.builtin.lineinfile:
@@ -79,7 +76,8 @@
     regexp: '^\s*\[ -s "\$NVM_DIR\/nvm\.sh" \] && \\\. "\$NVM_DIR\/nvm\.sh"\s*# This loads nvm\s*$'
     line: '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm'
     state: present
-  become: true # Become root
+  become: true
+  become_user: root
 
 - name: Add NVM bash completion sourcing to .bashrc for user 'ubuntu'
   ansible.builtin.lineinfile:
@@ -87,60 +85,63 @@
     regexp: '^\s*\[ -s "\$NVM_DIR\/bash_completion" \] && \\\. "\$NVM_DIR\/bash_completion"\s*# This loads nvm bash_completion\s*$'
     line: '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion'
     state: present
-  become: true # Become root
+  become: true
+  become_user: root
 
-# RESTORING THIS TASK CAREFULLY - Stage 1: NVM and Node install
-# - name: Install latest LTS Node.js and set as default using NVM for user 'ubuntu'
-#   ansible.builtin.shell: |
-#     set -e
-#     export NVM_DIR="/home/ubuntu/.nvm"
-#     # Source NVM
-#     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-#     # Install the latest LTS version
-#     nvm install --lts
-#     # Set the installed LTS as the default
-#     nvm alias default lts/*
-#     # Ensure it's used in current shell
-#     nvm use default
-#     echo "NVM setup complete. Node version: $(node -v), NPM version: $(npm -v)"
-#   args:
-#     executable: /bin/bash
-#   become: true
-#   become_user: ubuntu
-#   environment:
-#     HOME: /home/ubuntu
-#     NVM_DIR: /home/ubuntu/.nvm
-#   register: nvm_node_install # Restore register
-#   changed_when: "'Now using node' in nvm_node_install.stdout or 'Checksums matched' in nvm_node_install.stdout" # Restore simplified changed_when
-
-# - name: Show Node and NPM versions installed via NVM # Restore debug task
-#   ansible.builtin.debug:
-#     msg: "{{ nvm_node_install.stdout_lines }}"
-# # --- End of Node.js Installation Block using NVM ---
-
-- name: Installing Node Dependencies
+- name: Install latest LTS Node.js and set as default using NVM for user 'ubuntu'
   ansible.builtin.shell: |
     set -e
     export NVM_DIR="/home/ubuntu/.nvm"
-    # Source NVM to make node and npm available
+    # Source NVM
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    npm install
+    # Install the latest LTS version
+    nvm install --lts
+    # Set the installed LTS as the default
+    nvm alias default lts/*
+    # Ensure it's used in current shell
+    nvm use default # This should make 'node' and 'npm' available on PATH for this script
+    echo "NVM setup complete. Node version: $(node -v), NPM version: $(npm -v)"
   args:
     executable: /bin/bash
-    chdir: /home/ubuntu/backend-app # Use absolute path
+  become: true
+  become_user: ubuntu
+  environment:
+    HOME: /home/ubuntu
+    NVM_DIR: /home/ubuntu/.nvm
+  register: nvm_node_install
+  changed_when: "nvm_node_install.stdout.find('Now using node') != -1 or nvm_node_install.stdout.find('Checksums matched') != -1"
+
+- name: Show Node and NPM versions installed via NVM
+  ansible.builtin.debug:
+    var: nvm_node_install.stdout_lines # Changed to 'var' for cleaner full output of list
+    verbosity: 1 # Ensure it shows up even if not -vvv
+
+# --- End of Node.js Installation Block using NVM ---
+
+- name: Installing Node Dependencies using nvm exec
+  ansible.builtin.shell: |
+    set -e
+    export NVM_DIR="/home/ubuntu/.nvm"
+    # Source NVM (still good practice to have in case nvm exec needs it for context)
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    # Use nvm exec to run npm install with the default (LTS) version
+    nvm exec npm install
+  args:
+    executable: /bin/bash
+    chdir: /home/ubuntu/backend-app
   become: true
   become_user: ubuntu
   environment:
     HOME: /home/ubuntu
     NVM_DIR: /home/ubuntu/.nvm
 
-- name: Installing PM2 globally using NVM's Node
+- name: Installing PM2 globally using nvm exec
   ansible.builtin.shell: |
     set -e
     export NVM_DIR="/home/ubuntu/.nvm"
-    # Source NVM
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    npm install pm2 -g
+    # Use nvm exec to run npm install -g pm2
+    nvm exec npm install pm2 -g
   args:
     executable: /bin/bash
   become: true
@@ -151,47 +152,49 @@
   register: pm2_global_install
   changed_when: pm2_global_install.stdout is defined and ("added " in pm2_global_install.stdout or "changed " in pm2_global_install.stdout)
 
-- name: Ensuring app is started/restarted with PM2
+- name: Ensuring app is started/restarted with PM2 using nvm exec
   ansible.builtin.shell: |
     set -e
     export NVM_DIR="/home/ubuntu/.nvm"
-    # Source NVM
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    pm2 startOrRestart ecosystem.config.js
+    # Use nvm exec to run pm2 command
+    nvm exec pm2 startOrRestart ecosystem.config.js
   become: true
   become_user: ubuntu
   args:
-    chdir: /home/ubuntu/backend-app # Use absolute path
+    chdir: /home/ubuntu/backend-app
     executable: /bin/bash
   environment:
     HOME: /home/ubuntu
-    PM2_HOME: /home/ubuntu/.pm2
+    PM2_HOME: /home/ubuntu/.pm2 # PM2 still uses this for its own files
     NVM_DIR: /home/ubuntu/.nvm
   register: execute_node
 
 - name: Print PM2 start/restart message
   ansible.builtin.debug:
-    msg: "{{ execute_node.stdout_lines }}"
+    var: execute_node.stdout_lines
+    verbosity: 1
 
 - name: Configure pm2 to start as service on system boot
   become: true # Run as root
   ansible.builtin.shell: |
     set -e
-    export NVM_DIR="/home/ubuntu/.nvm"
-
-    NODE_PATH_CMD="export NVM_DIR='/home/ubuntu/.nvm'; [ -s '$NVM_DIR/nvm.sh' ] && . '$NVM_DIR/nvm.sh'; which node"
-    PM2_PATH_CMD="export NVM_DIR='/home/ubuntu/.nvm'; [ -s '$NVM_DIR/nvm.sh' ] && . '$NVM_DIR/nvm.sh'; which pm2"
+    # This task remains complex as root needs to find ubuntu's nvm-installed pm2
+    # and node. The 'su - ubuntu -c "which pm2"' approach is likely still the best here.
+    # The actual nvm exec is for tasks *run as ubuntu*.
+    NODE_PATH_CMD="export NVM_DIR='/home/ubuntu/.nvm'; [ -s '$NVM_DIR/nvm.sh' ] && . '$NVM_DIR/nvm.sh'; nvm exec which node"
+    PM2_PATH_CMD="export NVM_DIR='/home/ubuntu/.nvm'; [ -s '$NVM_DIR/nvm.sh' ] && . '$NVM_DIR/nvm.sh'; nvm exec which pm2"
 
     NODE_PATH_UNDER_NVM=$(su - ubuntu -c "$NODE_PATH_CMD")
     PM2_PATH_UNDER_NVM=$(su - ubuntu -c "$PM2_PATH_CMD")
 
     if [ -z "$PM2_PATH_UNDER_NVM" ] || [ -z "$NODE_PATH_UNDER_NVM" ]; then
-      echo "Critical: Could not find pm2 or node under NVM for user ubuntu. Cannot setup startup script."
-      exit 1 # This is important for a real run
+      echo "Critical: Could not find pm2 or node under NVM for user ubuntu using 'nvm exec which'. Cannot setup startup script."
+      exit 1
     fi
     
-    echo "Debug: Node path for PM2 startup: $NODE_PATH_UNDER_NVM"
-    echo "Debug: PM2 path for PM2 startup: $PM2_PATH_UNDER_NVM"
+    echo "Debug: Node path for PM2 startup (via nvm exec which): $NODE_PATH_UNDER_NVM"
+    echo "Debug: PM2 path for PM2 startup (via nvm exec which): $PM2_PATH_UNDER_NVM"
 
     env PATH="$PATH:$(dirname "$PM2_PATH_UNDER_NVM"):$(dirname "$NODE_PATH_UNDER_NVM")" "$PM2_PATH_UNDER_NVM" startup systemd -u ubuntu --hp /home/ubuntu
   args:
@@ -206,14 +209,14 @@
      'successfully set up' in pm2_startup.stdout or
      'command has been successfully executed' in pm2_startup.stdout)
 
-- name: Save PM2 process list to allow resurrect on reboot
+- name: Save PM2 process list to allow resurrect on reboot using nvm exec
   ansible.builtin.shell: |
     set -e
     export NVM_DIR="/home/ubuntu/.nvm"
-    # Source NVM
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    pm2 save
-  become: true  
+    # Use nvm exec to run pm2 save
+    nvm exec pm2 save
+  become: true
   become_user: ubuntu
   args:
     executable: /bin/bash
@@ -222,3 +225,5 @@
     PM2_HOME: /home/ubuntu/.pm2
     NVM_DIR: /home/ubuntu/.nvm
   changed_when: false
+
+  
