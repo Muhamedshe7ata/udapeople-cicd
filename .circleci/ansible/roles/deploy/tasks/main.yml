@@ -1,5 +1,6 @@
-# tasks file for deploy role
 ---
+# tasks file for deploy role
+
 - name: Creates backend app directory for ubuntu user
   ansible.builtin.file:
     path: /home/ubuntu/backend-app
@@ -25,7 +26,6 @@
     group: ubuntu
   become: true
 
-# --- Block to Install Node.js and npm using NVM (Node Version Manager) ---
 - name: Ensure prerequisites for NVM and building Node.js (curl, build-essential)
   ansible.builtin.apt:
     name:
@@ -60,7 +60,7 @@
 - name: Ensure NVM sourcing lines are in .bashrc for user 'ubuntu'
   ansible.builtin.lineinfile:
     path: /home/ubuntu/.bashrc
-    regexp: '^export NVM_DIR="\$HOME\/\.nvm"$'
+    regexp: '^export NVM_DIR="\$HOME/\.nvm"$'
     line: 'export NVM_DIR="$HOME/.nvm"'
     state: present
     create: yes
@@ -68,25 +68,22 @@
     group: ubuntu
     mode: '0644'
   become: true
-  become_user: root
 
 - name: Add NVM script sourcing to .bashrc for user 'ubuntu'
   ansible.builtin.lineinfile:
     path: /home/ubuntu/.bashrc
-    regexp: '^\s*\[ -s "\$NVM_DIR\/nvm\.sh" \] && \\\. "\$NVM_DIR\/nvm\.sh"\s*# This loads nvm\s*$'
+    regexp: '^\s*\[ -s "\$NVM_DIR/nvm\.sh" \] && \\. "\$NVM_DIR/nvm\.sh"\s*# This loads nvm\s*$'
     line: '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm'
     state: present
   become: true
-  become_user: root
 
 - name: Add NVM bash completion sourcing to .bashrc for user 'ubuntu'
   ansible.builtin.lineinfile:
     path: /home/ubuntu/.bashrc
-    regexp: '^\s*\[ -s "\$NVM_DIR\/bash_completion" \] && \\\. "\$NVM_DIR\/bash_completion"\s*# This loads nvm bash_completion\s*$'
+    regexp: '^\s*\[ -s "\$NVM_DIR/bash_completion" \] && \\. "\$NVM_DIR/bash_completion"\s*# This loads nvm bash_completion\s*$'
     line: '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion'
     state: present
   become: true
-  become_user: root
 
 - name: Install latest LTS Node.js and set as default using NVM for user 'ubuntu'
   become: true
@@ -109,18 +106,14 @@
 
 - name: Show Node and NPM versions installed via NVM
   ansible.builtin.debug:
-    var: nvm_node_install.stdout_lines # Changed to 'var' for cleaner full output of list
-    verbosity: 1 # Ensure it shows up even if not -vvv
-
-# --- End of Node.js Installation Block using NVM ---
+    var: nvm_node_install.stdout_lines
+    verbosity: 1
 
 - name: Installing Node Dependencies using nvm exec
   ansible.builtin.shell: |
     set -e
     export NVM_DIR="/home/ubuntu/.nvm"
-    # Source NVM (still good practice to have in case nvm exec needs it for context)
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    # Use nvm exec to run npm install with the default (LTS) version
     nvm exec npm install
   args:
     executable: /bin/bash
@@ -136,7 +129,6 @@
     set -e
     export NVM_DIR="/home/ubuntu/.nvm"
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    # Use nvm exec to run npm install -g pm2
     nvm exec npm install pm2 -g
   args:
     executable: /bin/bash
@@ -153,7 +145,6 @@
     set -e
     export NVM_DIR="/home/ubuntu/.nvm"
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    # Use nvm exec to run pm2 command
     nvm exec pm2 startOrRestart ecosystem.config.js
   become: true
   become_user: ubuntu
@@ -162,7 +153,7 @@
     executable: /bin/bash
   environment:
     HOME: /home/ubuntu
-    PM2_HOME: /home/ubuntu/.pm2 # PM2 still uses this for its own files
+    PM2_HOME: /home/ubuntu/.pm2
     NVM_DIR: /home/ubuntu/.nvm
   register: execute_node
 
@@ -172,14 +163,12 @@
     verbosity: 1
 
 - name: Configure pm2 to start as service on system boot
-  become: true # Run as root
-  ansible.builtin.shell: |
+  become: true
+  shell: |
     set -e
-    # This task remains complex as root needs to find ubuntu's nvm-installed pm2
-    # and node. The 'su - ubuntu -c "which pm2"' approach is likely still the best here.
-    # The actual nvm exec is for tasks *run as ubuntu*.
-    NODE_PATH_CMD="export NVM_DIR='/home/ubuntu/.nvm'; [ -s '$NVM_DIR/nvm.sh' ] && . '$NVM_DIR/nvm.sh'; nvm exec which node"
-    PM2_PATH_CMD="export NVM_DIR='/home/ubuntu/.nvm'; [ -s '$NVM_DIR/nvm.sh' ] && . '$NVM_DIR/nvm.sh'; nvm exec which pm2"
+
+    NODE_PATH_CMD="export NVM_DIR='/home/ubuntu/.nvm'; [ -s '\$NVM_DIR/nvm.sh' ] && . '\$NVM_DIR/nvm.sh'; nvm exec which node"
+    PM2_PATH_CMD="export NVM_DIR='/home/ubuntu/.nvm'; [ -s '\$NVM_DIR/nvm.sh' ] && . '\$NVM_DIR/nvm.sh'; nvm exec which pm2"
 
     NODE_PATH_UNDER_NVM=$(su - ubuntu -c "$NODE_PATH_CMD")
     PM2_PATH_UNDER_NVM=$(su - ubuntu -c "$PM2_PATH_CMD")
@@ -188,7 +177,7 @@
       echo "Critical: Could not find pm2 or node under NVM for user ubuntu using 'nvm exec which'. Cannot setup startup script."
       exit 1
     fi
-    
+
     echo "Debug: Node path for PM2 startup (via nvm exec which): $NODE_PATH_UNDER_NVM"
     echo "Debug: PM2 path for PM2 startup (via nvm exec which): $PM2_PATH_UNDER_NVM"
 
@@ -210,7 +199,6 @@
     set -e
     export NVM_DIR="/home/ubuntu/.nvm"
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    # Use nvm exec to run pm2 save
     nvm exec pm2 save
   become: true
   become_user: ubuntu
@@ -221,4 +209,3 @@
     PM2_HOME: /home/ubuntu/.pm2
     NVM_DIR: /home/ubuntu/.nvm
   changed_when: false
-
