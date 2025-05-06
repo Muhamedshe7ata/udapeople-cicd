@@ -140,6 +140,18 @@
   register: pm2_global_install
   changed_when: pm2_global_install.stdout is defined and ("added " in pm2_global_install.stdout or "changed " in pm2_global_install.stdout)
 
+- name: Fail if ecosystem.config.js is missing
+  ansible.builtin.stat:
+    path: /home/ubuntu/backend-app/ecosystem.config.js
+  register: ecosystem_file
+  become: true
+  become_user: ubuntu
+
+- name: Abort if ecosystem.config.js not found
+  ansible.builtin.fail:
+    msg: "ecosystem.config.js is missing in /home/ubuntu/backend-app. Ensure it is included in the build artifact."
+  when: not ecosystem_file.stat.exists
+
 - name: Ensuring app is started/restarted with PM2 using nvm exec
   ansible.builtin.shell: |
     set -e
@@ -167,8 +179,8 @@
   shell: |
     set -e
 
-    NODE_PATH_CMD="export NVM_DIR='/home/ubuntu/.nvm'; [ -s '\$NVM_DIR/nvm.sh' ] && . '\$NVM_DIR/nvm.sh'; nvm exec which node"
-    PM2_PATH_CMD="export NVM_DIR='/home/ubuntu/.nvm'; [ -s '\$NVM_DIR/nvm.sh' ] && . '\$NVM_DIR/nvm.sh'; nvm exec which pm2"
+    NODE_PATH_CMD="export NVM_DIR='/home/ubuntu/.nvm'; [ -s '$NVM_DIR/nvm.sh' ] && . '$NVM_DIR/nvm.sh'; nvm exec which node"
+    PM2_PATH_CMD="export NVM_DIR='/home/ubuntu/.nvm'; [ -s '$NVM_DIR/nvm.sh' ] && . '$NVM_DIR/nvm.sh'; nvm exec which pm2"
 
     NODE_PATH_UNDER_NVM=$(su - ubuntu -c "$NODE_PATH_CMD")
     PM2_PATH_UNDER_NVM=$(su - ubuntu -c "$PM2_PATH_CMD")
