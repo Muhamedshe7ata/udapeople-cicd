@@ -32,7 +32,6 @@
 
 - name: Download and install NVM for user 'ubuntu'
   ansible.builtin.shell: |
-    # Fetch the latest NVM version and install
     export NVM_DIR="/home/ubuntu/.nvm"
     mkdir -p "$NVM_DIR"
     curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
@@ -76,7 +75,6 @@
     state: present
   become: true
   become_user: root
-
 - name: Install latest LTS Node.js and set as default using NVM for user 'ubuntu'
   ansible.builtin.shell: |
     set -e
@@ -184,4 +182,4 @@
     echo "PM2 path under NVM for ubuntu: $PM2_PATH_UNDER_NVM"
 
     # Ensure the directories containing node and pm2 are in the PATH for the pm2 startup command
-    env PATH="$PATH:$(dirname "$PM2_PATH_UNDER_NVM"):$(dirname "$NODE_PATH_UNDER_NVM")" "$PM2_PATH_UNDER_NVM" startup systemd -u ubuntu --hp /home
+    env PATH="$PATH:$(dirname "$PM2_PATH_UNDER_NVM"):$(dirname "$NODE_PATH_UNDER_NVM")" "$PM2_PATH_UNDER_NVM" startup
