@@ -44,7 +44,6 @@
     HOME: /home/ubuntu # NVM installer uses HOME
   when: not nvm_check.stat.exists
   register: nvm_install_result
-  # A simple check: if stdout contains "is already installed" (from NVM script), it didn't change.
   changed_when: nvm_install_result.stdout is defined and 'already installed' not in nvm_install_result.stdout
 
 - name: Ensure NVM sourcing lines are in .bashrc for user 'ubuntu'
@@ -63,7 +62,6 @@
 - name: Add NVM script sourcing to .bashrc for user 'ubuntu'
   ansible.builtin.lineinfile:
     path: /home/ubuntu/.bashrc
-    # Match the line precisely to avoid duplicates if slightly different spacing exists
     regexp: '^\s*\[ -s "\$NVM_DIR\/nvm\.sh" \] && \\\. "\$NVM_DIR\/nvm\.sh"\s*# This loads nvm\s*$'
     line: '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm'
     state: present
@@ -73,7 +71,6 @@
 - name: Add NVM bash completion sourcing to .bashrc for user 'ubuntu'
   ansible.builtin.lineinfile:
     path: /home/ubuntu/.bashrc
-    # Match the line precisely
     regexp: '^\s*\[ -s "\$NVM_DIR\/bash_completion" \] && \\\. "\$NVM_DIR\/bash_completion"\s*# This loads nvm bash_completion\s*$'
     line: '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion'
     state: present
@@ -102,16 +99,8 @@
     HOME: /home/ubuntu # NVM uses HOME
     NVM_DIR: /home/ubuntu/.nvm # Make NVM_DIR explicit for the shell environment
   register: nvm_node_install
-  # Check if stdout contains common phrases indicating node was actually installed vs already present
-  changed_when: >
-    nvm_node_install.stdout is defined and (
-      "Now using node" in nvm_node_install.stdout or
-      "Checksums matched" in nvm_node_install.stdout or
-      "Installing" in nvm_node_install.stdout
-    ) and not (
-      "is already installed" in nvm_node_install.stdout and
-      "default -> lts/*" in nvm_node_install.stdout # if alias already set too
-    )
+  # SIMPLIFIED changed_when condition to isolate the problem
+  changed_when: "'Now using node' in nvm_node_install.stdout or 'Checksums matched' in nvm_node_install.stdout"
 
 - name: Show Node and NPM versions installed via NVM
   ansible.builtin.debug:
@@ -149,10 +138,7 @@
     HOME: /home/ubuntu
     NVM_DIR: /home/ubuntu/.nvm
   register: pm2_global_install
-  # Check if output indicates pm2 was added/changed
-  changed_when: >
-    pm2_global_install.stdout is defined and
-    ("added " in pm2_global_install.stdout or "changed " in pm2_global_install.stdout)
+  changed_when: pm2_global_install.stdout is defined and ("added " in pm2_global_install.stdout or "changed " in pm2_global_install.stdout)
 
 - name: Ensuring app is started/restarted with PM2
   ansible.builtin.shell: |
@@ -184,7 +170,6 @@
     export NVM_DIR="/home/ubuntu/.nvm"
 
     # Determine paths to node and pm2 as installed by NVM for the 'ubuntu' user
-    # These commands are run as the 'ubuntu' user to get its NVM environment
     NODE_PATH_CMD="export NVM_DIR='/home/ubuntu/.nvm'; [ -s '$NVM_DIR/nvm.sh' ] && . '$NVM_DIR/nvm.sh'; which node"
     PM2_PATH_CMD="export NVM_DIR='/home/ubuntu/.nvm'; [ -s '$NVM_DIR/nvm.sh' ] && . '$NVM_DIR/nvm.sh'; which pm2"
 
@@ -200,7 +185,6 @@
     echo "PM2 path under NVM for ubuntu: $PM2_PATH_UNDER_NVM"
 
     # Ensure the directories containing node and pm2 are in the PATH for the pm2 startup command
-    # The `env` command sets the environment specifically for the pm2 command.
     env PATH="$PATH:$(dirname "$PM2_PATH_UNDER_NVM"):$(dirname "$NODE_PATH_UNDER_NVM")" "$PM2_PATH_UNDER_NVM" startup systemd -u ubuntu --hp /home/ubuntu
   args:
     executable: /bin/bash
@@ -210,9 +194,9 @@
     'already setup' not in pm2_startup.stdout and
     ('systemd detected' in pm2_startup.stdout or
      '+ Done' in pm2_startup.stdout or
-     'command successfully executed' in pm2_startup.stdout or # Generic success
-     'successfully set up' in pm2_startup.stdout or           # Another variation
-     'command has been successfully executed' in pm2_startup.stdout) # NodeSource PM2 output
+     'command successfully executed' in pm2_startup.stdout or
+     'successfully set up' in pm2_startup.stdout or
+     'command has been successfully executed' in pm2_startup.stdout)
 
 - name: Save PM2 process list to allow resurrect on reboot
   ansible.builtin.shell: |
