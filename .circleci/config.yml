@@ -512,58 +512,63 @@ jobs:
       - run:
           name: Backend smoke test.
           command: |
-            #!/bin/bash -eo pipefail
+              echo "Fetching backend public IP..."
+              BACKEND_PUBLIC_IP=$(aws ec2 describe-instances \
+                --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
+                --query 'Reservations[*].Instances[*].PublicIpAddress' \
+                --output text)
+              echo "Target EC2 instance tag: backend-${CIRCLE_WORKFLOW_ID:0:7}"
+              echo "Retrieved BACKEND_PUBLIC_IP: '${BACKEND_PUBLIC_IP}'"
 
-            echo "Fetching backend public IP..."
-            BACKEND_PUBLIC_IP=$(aws ec2 describe-instances \
-              --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
-              --query 'Reservations[*].Instances[*].PublicIpAddress' \
-              --output text)
-
-            echo "Target EC2 instance tag: backend-${CIRCLE_WORKFLOW_ID:0:7}"
-            echo "Retrieved BACKEND_PUBLIC_IP: '${BACKEND_PUBLIC_IP}'"
-
-            if [ -z "${BACKEND_PUBLIC_IP}" ]; then
-              echo "ERROR: BACKEND_PUBLIC_IP is empty. Cannot proceed."
-              exit 1
-            fi
-
-            API_URL="http://${BACKEND_PUBLIC_IP}:3030"
-            echo "Constructed API_URL: ${API_URL}/api/status"
-
-            echo ""
-            echo "--- Attempting curl directly. Verbose output from curl will follow immediately: ---"
-            # Run curl and let its output (stdout and stderr) go to the terminal directly.
-            # -v for verbosity.
-            # -L to follow redirects.
-            # --fail-with-body: Fails on HTTP server errors (4xx, 5xx) but prints the body, then exits non-zero.
-            curl -v -L --fail-with-body "${API_URL}/api/status"
-            curl_exit_code=$? # Capture exit code of the *last* command
-
-            echo "--- Curl command finished. Exit code was: ${curl_exit_code} ---"
-            echo ""
-
-            if [ ${curl_exit_code} -ne 0 ]; then
-              # If curl_exit_code is not 0, it means curl failed for some reason
-              # (e.g., connection refused, host not found, HTTP error 4xx/5xx).
-              # The verbose output from curl itself (above) should show why.
-              echo "Backend smoke test FAILED because curl command exited with code ${curl_exit_code}."
-              exit 1
-            else
-              # Curl reported success (exit code 0 means HTTP status was 2xx or 3xx if -L followed).
-              # Now, check if the successful response contains the string "ok".
-              echo "Curl reported HTTP success. Verifying response content contains 'ok'..."
-              # We need to run curl again, this time silently (-s) to check the content.
-              if curl -s -L --fail-with-body "${API_URL}/api/status" | grep -q "ok"; then
-                echo "Backend smoke test PASSED: 'ok' found in response."
-                exit 0
-              else
-                echo "Backend smoke test FAILED: Content check for 'ok' failed after successful HTTP request."
-                echo "Response body received (for content check):"
-                curl -s -L --fail-with-body "${API_URL}/api/status" # Print the body again for diagnosis
+              if [ -z "${BACKEND_PUBLIC_IP}" ]; then
+                echo "ERROR: BACKEND_PUBLIC_IP is empty. Cannot proceed."
                 exit 1
               fi
-            fi
+
+              API_URL="http://${BACKEND_PUBLIC_IP}:3030"
+              echo "Constructed API_URL: ${API_URL}/api/status"
+
+              echo ""
+              echo "--- Attempting curl directly. Verbose output from curl will follow immediately: ---"
+              # Run curl and let its output (stdout and stderr) go to the terminal directly.
+              # -v for verbosity.
+              # -L to follow redirects.
+              # -f (or --fail): Fail silently (no output) on HTTP errors (4xx, 5xx).
+              #                  Exits with 22 on such errors.
+              curl -v -L -f "${API_URL}/api/status" # Removed --fail-with-body, using -f
+              curl_exit_code=$? # Capture exit code of the *last* command
+
+              echo "--- Curl command finished. Exit code was: ${curl_exit_code} ---"
+              echo ""
+
+              if [ ${curl_exit_code} -ne 0 ]; then
+                # If curl_exit_code is not 0, it means curl failed.
+                # If it was 22, it was an HTTP server error (like 404 or 500).
+                # Other non-zero codes mean other errors (connection refused, host not found etc.)
+                # The verbose output from curl itself (above) should show why.
+                echo "Backend smoke test FAILED because curl command exited with code ${curl_exit_code}."
+                if [ ${curl_exit_code} -eq 22 ]; then
+                  echo "Curl exit code 22 typically indicates an HTTP server error (e.g., 404 Not Found, 500 Internal Server Error)."
+                  echo "Check the verbose output above for the exact HTTP status."
+                fi
+                exit 1
+              else
+                # Curl reported HTTP success (exit code 0 means HTTP status was 2xx or 3xx if -L followed).
+                # Now, check if the successful response contains the string "ok".
+                echo "Curl reported HTTP success. Verifying response content contains 'ok'..."
+                # We run curl again, this time silently (-s) and still with -f to handle HTTP errors.
+                if curl -s -L -f "${API_URL}/api/status" | grep -q "ok"; then
+                  echo "Backend smoke test PASSED: 'ok' found in response."
+                  exit 0
+                else
+                  echo "Backend smoke test FAILED: Content check for 'ok' failed after successful HTTP request."
+                  echo "This could mean the page was successfully retrieved but didn't contain 'ok'."
+                  echo "Printing the body received for content check (if any):"
+                  # Run again without -s to see the output if grep failed. No -f here, we want to see body.
+                  curl -L "${API_URL}/api/status"
+                  exit 1
+                fi
+          
       - run:
           name: Frontend smoke test.
           command: |
