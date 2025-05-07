@@ -406,34 +406,77 @@ jobs:
 
              
       - run:
-            
           name: Package Backend
           command: |
-
             echo "--- Starting Package Backend Step ---"
             echo "Current directory: $(pwd)"
-            echo "Listing directory contents before cd:"
-            ls -la
-            cd backend # This is the line that was failing
-            echo "Inside backend/ directory: $(pwd)"
-            echo "Listing contents of backend/ directory to ensure ecosystem.config.js is here:"
-            ls -la # <-- ADD THIS to see if ecosystem.config.js is present
-            echo "Running npm run build..."
-            npm run build
-            echo "Running tar command..."
-            tar -czf artifact.tar.gz dist/* package* ecosystem.config.js # <-- THE MODIFIED LINE
-            echo "Checking if artifact.tar.gz exists in backend/:"
-            ls -la artifact.tar.gz # Check if tar created the file here
+            ls -la # See project root contents
+
+            echo "Changing to backend/ directory..."
+            cd backend
+            echo "Current directory is now: $(pwd)"
+
+            echo "Listing contents of backend/ directory BEFORE build:"
+            ls -la # See what's here initially (node_modules might exist from caching)
+
+            echo "Ensuring node_modules are installed (running npm install)..."
+            npm install # Make sure dependencies are there for the build
+
+            echo "Running npm run build (which should execute tsc)..."
+            npm run build # This is where 'dist/' should be created
+
+            echo "Build finished. Checking for dist/ directory..."
+            if [ -d "dist" ]; then
+              echo "SUCCESS: dist/ directory was created."
+              echo "Contents of dist/ directory:"
+              ls -la dist # CRITICAL: See if main.js is here
+              
+              # Specific check for main.js (or your entry file)
+              if [ -f "dist/main.js" ]; then
+                echo "SUCCESS: dist/main.js exists!"
+              else
+                echo "ERROR: dist/main.js DOES NOT EXIST. Check your tsc build and tsconfig.json outDir."
+                # Consider exiting with an error if main.js is crucial and missing
+                # exit 1 
+              fi
+            else
+              echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+              echo "CRITICAL ERROR: dist/ directory was NOT created by npm run build!"
+              echo "This means 'tsc' (TypeScript compiler) did not produce output to a 'dist' folder."
+              echo "Check your 'package.json' build script and 'tsconfig.json' (especially 'outDir')."
+              echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+              exit 1 # Definitely exit if dist isn't created
+            fi
+
+            echo "Checking for ecosystem.config.js before tarring..."
+            if [ -f "ecosystem.config.js" ]; then
+              echo "ecosystem.config.js found in backend/ root."
+              echo "Running tar command including ecosystem.config.js..."
+              tar -czf artifact.tar.gz dist/* package* ecosystem.config.js
+            else
+              echo "WARNING: ecosystem.config.js not found in backend/ root."
+              echo "Running tar command WITHOUT ecosystem.config.js (this might cause PM2 issues later)..."
+              tar -czf artifact.tar.gz dist/* package*
+            fi
+            
+            echo "Checking if artifact.tar.gz was created:"
+            ls -la artifact.tar.gz
+
+            echo "Listing contents of artifact.tar.gz (to verify inclusion):"
+            tar -tzf artifact.tar.gz # List contents of the tarball
+
+            echo "Changing back to project root..."
             cd ..
-            echo "Back to project root: $(pwd)"
-            echo "Creating target directory if it doesn't exist..."
+            echo "Current directory is now: $(pwd)"
+            
+            echo "Creating Ansible target directory if it doesn't exist..."
             mkdir -p .circleci/ansible/roles/deploy/files
-            echo "Checking if target directory exists:"
-            ls -ld .circleci/ansible/roles/deploy/files # Check if the target dir exists
+            
             echo "Copying artifact..."
             cp backend/artifact.tar.gz .circleci/ansible/roles/deploy/files
-            echo "Checking if artifact.tar.gz exists in target directory:"
-            ls -la .circleci/ansible/roles/deploy/files/artifact.tar.gz # Check if cp worked
+            
+            echo "Verifying artifact in target directory:"
+            ls -la .circleci/ansible/roles/deploy/files/artifact.tar.gz
             echo "--- Finished Package Backend Step ---"
 
       - run:
