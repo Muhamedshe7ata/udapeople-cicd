@@ -180,75 +180,68 @@
   # Your original condition for this skipped task might be different
 
 
-# --- REPLACE THE OLD FAILING TASK WITH THE FOLLOWING BLOCK ---
+# roles/deploy/tasks/main.yml (or relevant tasks file)
+
+# ... (previous tasks)
 
 - name: Get Node path under NVM for user 'ubuntu'
   ansible.builtin.shell:
     cmd: |
       export NVM_DIR="/home/ubuntu/.nvm"
-      [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # Source NVM
-      nvm use default >/dev/null 2>&1 || nvm use lts/* >/dev/null 2>&1 # Ensure a version is active
+      [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+      nvm use default >/dev/null 2>&1 || nvm use lts/* >/dev/null 2>&1
       nvm exec which node
-    executable: /bin/bash # Ensure bash is used
+    executable: /bin/bash
   become: true
   become_user: ubuntu
   register: node_path_result
   changed_when: false
-  check_mode: no # Always run this to get the path
+  check_mode: no
 
 - name: Get PM2 path under NVM for user 'ubuntu'
   ansible.builtin.shell:
     cmd: |
       export NVM_DIR="/home/ubuntu/.nvm"
-      [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # Source NVM
-      nvm use default >/dev/null 2>&1 || nvm use lts/* >/dev/null 2>&1 # Ensure a version is active
+      [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+      nvm use default >/dev/null 2>&1 || nvm use lts/* >/dev/null 2>&1
       nvm exec which pm2
-    executable: /bin/bash # Ensure bash is used
-  become:  true
+    executable: /bin/bash
+  become: true
   become_user: ubuntu
   register: pm2_path_result
   changed_when: false
-  check_mode: no # Always run this to get the path
+  check_mode: no
 
+# MODIFIED TASK
 - name: Set facts for Node and PM2 paths
   ansible.builtin.set_fact:
-    node_path_under_nvm: "{{ node_path_result.stdout | trim }}"
-    pm2_path_under_nvm: "{{ pm2_path_result.stdout | trim }}"
+    node_path_under_nvm: "{{ (node_path_result.stdout | trim).split('\n')[-1] }}"
+    pm2_path_under_nvm: "{{ (pm2_path_result.stdout | trim).split('\n')[-1] }}"
 
 - name: Fail if Node or PM2 paths were not found
   ansible.builtin.fail:
-    msg: >-
-      Critical: Could not find pm2 or node under NVM for user ubuntu. 
-      Node path: '{{ node_path_under_nvm | string }}', 
-      PM2 path: '{{ pm2_path_under_nvm | string }}'
-  when: node_path_under_nvm == "" or pm2_path_under_nvm == ""
+    msg: "Critical: Could not find pm2 or node under NVM for user ubuntu. Node path: '{{ node_path_under_nvm }}', PM2 path: '{{ pm2_path_under_nvm }}'"
+  when: node_path_under_nvm == "" or pm2_path_under_nvm == "" or not node_path_under_nvm.startswith('/') or not pm2_path_under_nvm.startswith('/')
 
-- block:
-  - name: Show found paths (optional, good for verification)
-    ansible.builtin.debug:
-      msg: >-
-        Node path for PM2 startup: {{ node_path_under_nvm }},
-        PM2 path for PM2 startup: {{ pm2_path_under_nvm }}
-    when: node_path_under_nvm != "" and pm2_path_under_nvm != ""
-
-# This is the MODIFIED task replacing your original failing one
-- block:
-    - name: Configure pm2 to start as service on system boot
-      ansible.builtin.command:
+- name:  Show found paths (optional, good for verification)
+  ansible.builtin.debug:
+    msg: |
+      Node path for PM2 startup: {{ node_path_under_nvm }}
+      PM2 path for PM2 startup: {{ pm2_path_under_nvm }}
+  when: node_path_under_nvm != "" and pm2_path_under_nvm != ""
+  # MODIFIED TASK
+- name: Configure pm2 to start as service on system boot
+  block:
+    - ansible.builtin.command:
         argv:
-          - "{{ pm2_path_under_nvm }}"
+          - "{{ pm2_path_under_nvm }}" # This will now be the clean path
           - startup
           - systemd
           - -u
           - ubuntu
           - --hp
           - /home/ubuntu
-        env:
-          PATH: "{{ ansible_env.PATH }}:{{ node_path_under_nvm | dirname }}:{{ pm2_path_under_nvm | dirname }}"
-      become: true # Run as root to set up systemd service
-      when: pm2_path_under_nvm != "" and node_path_under_nvm != "" # Only run if paths were found
-
-# --- END OF REPLACEMENT BLOCK ---
-
-
-# ... (any subsequent tasks in your roles/deploy/tasks/main.yml) ...
+      environment: # <<< MOVED HERE and renamed from 'env'
+        PATH: "{{ ansible_env.PATH }}:{{ node_path_under_nvm | dirname }}:{{ pm2_path_under_nvm | dirname }}"
+      become: true
+  when: pm2_path_under_nvm != "" and node_path_under_nvm != "" and node_path_under_nvm.startswith('/') and pm2_path_under_nvm.startswith('/')
