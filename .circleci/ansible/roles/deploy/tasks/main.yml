@@ -140,84 +140,115 @@
   register: pm2_global_install
   changed_when: pm2_global_install.stdout is defined and ("added " in pm2_global_install.stdout or "changed " in pm2_global_install.stdout)
 
-- name: Fail if ecosystem.config.js is missing
+# ... (previous tasks in your roles/deploy/tasks/main.yml) ...
+
+# TASK [deploy : Fail if ecosystem.config.js is missing] *************************
+- name: Fail if ecosystem.config.js is missing # Or whatever this task actually does to check
   ansible.builtin.stat:
-    path: /home/ubuntu/backend-app/ecosystem.config.js
-  register: ecosystem_file
+    path: "/home/ubuntu/backend-app/ecosystem.config.js" # Adjust path if needed
+  register: ecosystem_config_file
   become: true
   become_user: ubuntu
 
+# TASK [deploy : Abort if ecosystem.config.js not found] *************************
 - name: Abort if ecosystem.config.js not found
   ansible.builtin.fail:
-    msg: "ecosystem.config.js is missing in /home/ubuntu/backend-app. Ensure it is included in the build artifact."
-  when: not ecosystem_file.stat.exists
+    msg: "ecosystem.config.js not found at /home/ubuntu/backend-app/ecosystem.config.js. Aborting."
+  when: not ecosystem_config_file.stat.exists
 
+# TASK [deploy : Ensuring app is started/restarted with PM2 using nvm exec] ******
 - name: Ensuring app is started/restarted with PM2 using nvm exec
-  ansible.builtin.shell: |
-    set -e
-    export NVM_DIR="/home/ubuntu/.nvm"
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    nvm exec pm2 startOrRestart ecosystem.config.js
-  become: true
-  become_user: ubuntu
+  ansible.builtin.shell: # Or command, depending on your original task
+    cmd: |
+      export NVM_DIR="/home/ubuntu/.nvm"
+      [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+      cd /home/ubuntu/backend-app && nvm exec pm2 restart ecosystem.config.js --update-env || nvm exec pm2 start ecosystem.config.js
+    executable: /bin/bash
   args:
     chdir: /home/ubuntu/backend-app
-    executable: /bin/bash
-  environment:
-    HOME: /home/ubuntu
-    PM2_HOME: /home/ubuntu/.pm2
-    NVM_DIR: /home/ubuntu/.nvm
-  register: execute_node
-
-- name: Print PM2 start/restart message
-  ansible.builtin.debug:
-    var: execute_node.stdout_lines
-    verbosity: 1
-
-- name: Configure pm2 to start as service on system boot
-  become: true
-  shell: |
-    set -e
-
-    NODE_PATH_CMD="export NVM_DIR='/home/ubuntu/.nvm'; [ -s '$NVM_DIR/nvm.sh' ] && . '$NVM_DIR/nvm.sh'; nvm exec which node"
-    PM2_PATH_CMD="export NVM_DIR='/home/ubuntu/.nvm'; [ -s '$NVM_DIR/nvm.sh' ] && . '$NVM_DIR/nvm.sh'; nvm exec which pm2"
-
-    NODE_PATH_UNDER_NVM=$(su - ubuntu -c "$NODE_PATH_CMD")
-    PM2_PATH_UNDER_NVM=$(su - ubuntu -c "$PM2_PATH_CMD")
-
-    if [ -z "$PM2_PATH_UNDER_NVM" ] || [ -z "$NODE_PATH_UNDER_NVM" ]; then
-      echo "Critical: Could not find pm2 or node under NVM for user ubuntu using 'nvm exec which'. Cannot setup startup script."
-      exit 1
-    fi
-
-    echo "Debug: Node path for PM2 startup (via nvm exec which): $NODE_PATH_UNDER_NVM"
-    echo "Debug: PM2 path for PM2 startup (via nvm exec which): $PM2_PATH_UNDER_NVM"
-
-    env PATH="$PATH:$(dirname "$PM2_PATH_UNDER_NVM"):$(dirname "$NODE_PATH_UNDER_NVM")" "$PM2_PATH_UNDER_NVM" startup systemd -u ubuntu --hp /home/ubuntu
-  args:
-    executable: /bin/bash
-  register: pm2_startup
-  changed_when: >
-    pm2_startup.stdout is defined and
-    'already setup' not in pm2_startup.stdout and
-    ('systemd detected' in pm2_startup.stdout or
-     '+ Done' in pm2_startup.stdout or
-     'command successfully executed' in pm2_startup.stdout or
-     'successfully set up' in pm2_startup.stdout or
-     'command has been successfully executed' in pm2_startup.stdout)
-
-- name: Save PM2 process list to allow resurrect on reboot using nvm exec
-  ansible.builtin.shell: |
-    set -e
-    export NVM_DIR="/home/ubuntu/.nvm"
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    nvm exec pm2 save
   become: true
   become_user: ubuntu
-  args:
-    executable: /bin/bash
-  environment:
-    HOME: /home/ubuntu
-    PM2_HOME: /home/ubuntu/.pm2
-    NVM_DIR: /home/ubuntu/.nvm
+  register: pm2_start_restart_result
+  changed_when: "'App already running' not in pm2_start_restart_result.stdout and pm2_start_restart_result.rc == 0"
+  # Add other necessary parameters from your original task
+
+# TASK [deploy : Print PM2 start/restart message] ********************************
+- name: Print PM2 start/restart message
+  ansible.builtin.debug:
+    msg: "{{ pm2_start_restart_result.stdout_lines }}"
+  when: pm2_start_restart_result.stdout_lines is defined and pm2_start_restart_result.stdout_lines | length > 0
+  # Your original condition for this skipped task might be different
+
+
+# --- REPLACE THE OLD FAILING TASK WITH THE FOLLOWING BLOCK ---
+
+- name: Get Node path under NVM for user 'ubuntu'
+  ansible.builtin.shell:
+    cmd: |
+      export NVM_DIR="/home/ubuntu/.nvm"
+      [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # Source NVM
+      nvm use default >/dev/null 2>&1 || nvm use lts/* >/dev/null 2>&1 # Ensure a version is active
+      nvm exec which node
+    executable: /bin/bash # Ensure bash is used
+  become: true
+  become_user: ubuntu
+  register: node_path_result
   changed_when: false
+  check_mode: no # Always run this to get the path
+
+- name: Get PM2 path under NVM for user 'ubuntu'
+  ansible.builtin.shell:
+    cmd: |
+      export NVM_DIR="/home/ubuntu/.nvm"
+      [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # Source NVM
+      nvm use default >/dev/null 2>&1 || nvm use lts/* >/dev/null 2>&1 # Ensure a version is active
+      nvm exec which pm2
+    executable: /bin/bash # Ensure bash is used
+  become:  true
+  become_user: ubuntu
+  register: pm2_path_result
+  changed_when: false
+  check_mode: no # Always run this to get the path
+
+- name: Set facts for Node and PM2 paths
+  ansible.builtin.set_fact:
+    node_path_under_nvm: "{{ node_path_result.stdout | trim }}"
+    pm2_path_under_nvm: "{{ pm2_path_result.stdout | trim }}"
+
+- name: Fail if Node or PM2 paths were not found
+  ansible.builtin.fail:
+    msg: >-
+      Critical: Could not find pm2 or node under NVM for user ubuntu. 
+      Node path: '{{ node_path_under_nvm | string }}', 
+      PM2 path: '{{ pm2_path_under_nvm | string }}'
+  when: node_path_under_nvm == "" or pm2_path_under_nvm == ""
+
+- block:
+  - name: Show found paths (optional, good for verification)
+    ansible.builtin.debug:
+      msg: >-
+        Node path for PM2 startup: {{ node_path_under_nvm }},
+        PM2 path for PM2 startup: {{ pm2_path_under_nvm }}
+    when: node_path_under_nvm != "" and pm2_path_under_nvm != ""
+
+# This is the MODIFIED task replacing your original failing one
+- block:
+    - name: Configure pm2 to start as service on system boot
+      ansible.builtin.command:
+        argv:
+          - "{{ pm2_path_under_nvm }}"
+          - startup
+          - systemd
+          - -u
+          - ubuntu
+          - --hp
+          - /home/ubuntu
+        env:
+          PATH: "{{ ansible_env.PATH }}:{{ node_path_under_nvm | dirname }}:{{ pm2_path_under_nvm | dirname }}"
+      become: true # Run as root to set up systemd service
+      when: pm2_path_under_nvm != "" and node_path_under_nvm != "" # Only run if paths were found
+
+# --- END OF REPLACEMENT BLOCK ---
+
+
+# ... (any subsequent tasks in your roles/deploy/tasks/main.yml) ...
