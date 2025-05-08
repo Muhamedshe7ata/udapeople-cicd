@@ -501,53 +501,41 @@ jobs:
       # - destroy-environment
       # - revert-migrations
 
-  smoke-test:
-    docker:
-      - image: python:3.7-alpine3.11
-    steps:
-      - attach_workspace:
-          at: ~/
       - run:
-          name: Install dependencies
+          name: Backend smoke test.
           command: |
-            apk add --no-cache curl
-            pip install awscli
-      - run:
-          name: Smoke Test Frontend App # Renamed for clarity
-          command: |
-            # This command will exit 0 if "Welcome" is found, and 1 if not.
-            # CircleCI will automatically pass/fail the step based on this exit code.
-            curl -s "http://udapeople-prod-${CIRCLE_WORKFLOW_ID:0:7}.s3-website.eu-central-1.amazonaws.com/" | grep "Welcome"
-            echo "Smoke test check completed. If the step failed, 'Welcome' was not found."
-
-
-  smoke-test-backend:
-    docker:
-      - image: python:3.7-alpine3.11
-    steps:
-      - attach_workspace:
-          at: ~/
-      - run:
-          name: Install deps & Test backend
-          command: |
-            apk add --no-cache --update curl
-            set -e
-
-            URL_FILE=".circleci/outputs/backend_url.txt"; EXPECTED='healthy'
-
-            # Try to read file; if cat fails or result is empty, error out.
-            # 2>/dev/null silences cat's "file not found" error, relying on our custom message.
-            if ! API_URL=$(cat "$URL_FILE" 2>/dev/null) || [ -z "$API_URL" ]; then
-              echo "Error: $URL_FILE not found or is empty." >&2
-              exit 1
-            fi
-            TARGET_URL="${API_URL}/api/status"
-            echo "Testing $TARGET_URL for '$EXPECTED'..."
-
-            if curl -sf "$TARGET_URL" | grep -qF "$EXPECTED"; then
-              echo "PASS: Test successful." # Shortened success message
+            BACKEND_AWS_PUBLIC_IP=$(aws ec2 describe-instances \
+              --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
+              --query 'Reservations[*].Instances[*].PublicIpAddress' \
+              --output text)
+            echo "$BACKEND_AWS_PUBLIC_IP" >> .circleci/ansible/inventory.txt
+            echo "http://$BACKEND_AWS_PUBLIC_IP:3030" >> .circleci/outputs/backend_url.txt
+            cat .circleci/outputs/backend_url.txt >> frontend/.env
+            cat frontend/.env
+            export API_URL="http://${BACKEND_AWS_PUBLIC_IP}:3030"
+            echo "API_URL = ${API_URL}"
+            if curl "${API_URL}/api/status" | grep "ok"
+            then
+                echo SUCCESS
+                exit 0
             else
-              echo "FAIL: Test failed for $TARGET_URL (expected '$EXPECTED')." >&2 # More specific fail
+                 echo FAIL
+                 exit 1
+            fi
+
+
+
+      - run:
+          name: Frontend smoke test.
+          command: |
+            URL="http://udapeople-${CIRCLE_WORKFLOW_ID:0:7}.s3-website.${AWS_DEFAULT_REGION}.amazonaws.com/#/employees"
+            echo ${URL}
+            if curl -s ${URL} | grep "Welcome"
+            then
+              echo SUCCESS
+              exit 0
+            else
+              echo FAIL
               exit 1
             fi
 
