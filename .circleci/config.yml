@@ -500,7 +500,19 @@ jobs:
 
       # - destroy-environment
       # - revert-migrations
-
+  smoke-test:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: |
+            sudo apt update
+            sudo apt upgrade -y
+            sudo apt install -y curl
+            sudo apt install -y awscli
+            aws --version
       - run:
           name: Backend smoke test.
           command: |
