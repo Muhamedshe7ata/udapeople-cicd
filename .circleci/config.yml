@@ -500,7 +500,8 @@ jobs:
 
       # - destroy-environment
       # - revert-migrations
-  smoke_test_frontend:
+
+  smoke-test_frontend:
       docker:
         - image: python:3.7-alpine3.11
       steps:
@@ -524,7 +525,7 @@ jobs:
         #     workflow_id: "${CIRCLE_WORKFLOW_ID:0:7}"
         # - undo_migrations
 
-  smoke_test_backend:
+  smoke-test_backend:
       docker:
         - image: python:3.7-alpine3.11
       steps:
