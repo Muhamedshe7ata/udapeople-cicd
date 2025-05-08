@@ -24,11 +24,11 @@ module.exports = {
       TYPEORM_CONNECTION: "postgres", // Or your DB type if different
       TYPEORM_HOST: "udapeople-db2.cdmi2qaac5y1.eu-north-1.rds.amazonaws.com", // From your PM2 logs
       TYPEORM_PORT: 5432, // From your PM2 logs
-      TYPEORM_USERNAME: "YOUR_DATABASE_USER",    // !!! REPLACE with your actual DB username !!!
-      TYPEORM_PASSWORD: "YOUR_DATABASE_PASSWORD",  // !!! REPLACE with your actual DB password !!!
+      TYPEORM_USERNAME: "postgres",    // !!! REPLACE with your actual DB username !!!
+      TYPEORM_PASSWORD: "Berlin2025#$",  // !!! REPLACE with your actual DB password !!!
       TYPEORM_DATABASE: "glee", // From your PM2 logs
       TYPEORM_SYNCHRONIZE: "false", // IMPORTANT: Should be false in production to avoid data loss
-      TYPEORM_ENTITIES: "dist/**/*.entity.js", // CRITICAL: Path to your compiled entities
+      TYPEORM_ENTITIES:  "dist/modules/domain/**/*.entity.js", // CRITICAL: Path to your compiled entities
       // TYPEORM_MIGRATIONS: "dist/migrations/*.js", // If you use migrations, path to compiled migrations
       // TYPEORM_MIGRATIONS_DIR: "dist/migrations",  // If you use migrations
       // TYPEORM_MIGRATIONS_RUN: "true", // Or false, depending on your strategy
