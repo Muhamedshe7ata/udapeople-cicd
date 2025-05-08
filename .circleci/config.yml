@@ -516,19 +516,31 @@ jobs:
       - run:
           name: Backend smoke test.
           command: |       
+            #!/bin/bash -eo pipefail
             BACKEND_PUBLIC_IP=$(aws ec2 describe-instances \
-               --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
-               --query 'Reservations[*].Instances[*].PublicIpAddress' \
-               --output text)
-              
-            export API_URL=http://${BACKEND_PUBLIC_IP}:3030
-            if curl -s $API_URL/api/status | grep "ok"
-            then
-              exit 0
-            else
-              exit 1
+                --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
+                --query 'Reservations[].Instances[].PublicIpAddress' \
+                --output text)
+
+            # Check if BACKEND_PUBLIC_IP is empty
+            if [ -z "$BACKEND_PUBLIC_IP" ]; then
+                echo "Error: No EC2 instances found with the specified tag."
+                exit 1
             fi
-      
+
+            # Set API URL
+            export API_URL=http://${BACKEND_PUBLIC_IP}:3030
+
+            # Check API status
+            if curl -s $API_URL/api/status | grep "ok"; then
+                echo "Smoke test passed."
+                exit 0
+            else
+                echo "Smoke test failed. 'ok' not found in API response."
+                exit 1
+            fi
+
+                  
 
       - run:
           name: Frontend smoke test.
