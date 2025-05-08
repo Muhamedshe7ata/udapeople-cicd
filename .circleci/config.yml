@@ -515,27 +515,20 @@ jobs:
             aws --version
       - run:
           name: Backend smoke test.
-          command: |
-            BACKEND_AWS_PUBLIC_IP=$(aws ec2 describe-instances \
-              --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
-              --query 'Reservations[*].Instances[*].PublicIpAddress' \
-              --output text)
-            echo "$BACKEND_AWS_PUBLIC_IP" >> .circleci/ansible/inventory.txt
-            echo "http://$BACKEND_AWS_PUBLIC_IP:3030" >> .circleci/outputs/backend_url.txt
-            cat .circleci/outputs/backend_url.txt >> frontend/.env
-            cat frontend/.env
-            export API_URL="http://${BACKEND_AWS_PUBLIC_IP}:3030"
-            echo "API_URL = ${API_URL}"
-            if curl "${API_URL}/api/status" | grep "ok"
+          command: |       
+            BACKEND_PUBLIC_IP=$(aws ec2 describe-instances \
+               --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
+               --query 'Reservations[*].Instances[*].PublicIpAddress' \
+               --output text)
+              
+            export API_URL=http://${BACKEND_PUBLIC_IP}:3030
+            if curl -s $API_URL/api/status | grep "ok"
             then
-                echo SUCCESS
-                exit 0
+              exit 0
             else
-                 echo FAIL
-                 exit 1
+              exit 1
             fi
-
-
+      
 
       - run:
           name: Frontend smoke test.
