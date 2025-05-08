@@ -516,29 +516,36 @@ jobs:
       - run:
           name: Backend smoke test.
           command: |       
-            #!/bin/bash -eo pipefail
-            BACKEND_PUBLIC_IP=$(aws ec2 describe-instances \
-                --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
-                --query 'Reservations[].Instances[].PublicIpAddress' \
-                --output text)
+              #!/bin/bash -eo pipefail
+              BACKEND_PUBLIC_IP=$(aws ec2 describe-instances \
+                  --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
+                  --query 'Reservations[].Instances[].PublicIpAddress' \
+                  --output text)
 
-            # Check if BACKEND_PUBLIC_IP is empty
-            if [ -z "$BACKEND_PUBLIC_IP" ]; then
+              # Check if BACKEND_PUBLIC_IP is empty
+              if [ -z "$BACKEND_PUBLIC_IP" ]; then
                 echo "Error: No EC2 instances found with the specified tag."
                 exit 1
-            fi
+              fi
 
-            # Set API URL
-            export API_URL=http://${BACKEND_PUBLIC_IP}:3030
+              echo "Retrieved BACKEND_PUBLIC_IP: $BACKEND_PUBLIC_IP"
 
-            # Check API status
-            if curl -s $API_URL/api/status | grep "ok"; then
+              # Set API URL
+              export API_URL=http://${BACKEND_PUBLIC_IP}:3030
+
+              echo "API URL: $API_URL"
+
+              # Check API status
+              RESPONSE=$(curl -s $API_URL/api/status)
+              echo "API Response: $RESPONSE"
+
+              if echo "$RESPONSE" | grep "ok"; then
                 echo "Smoke test passed."
                 exit 0
-            else
+              else 
                 echo "Smoke test failed. 'ok' not found in API response."
-                exit 1
-            fi
+                exit 1 
+              fi 
 
                   
 
