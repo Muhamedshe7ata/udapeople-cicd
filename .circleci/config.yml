@@ -517,10 +517,11 @@ jobs:
           name: Backend smoke test.
           command: |       
               #!/bin/bash -eo pipefail
+              STACK_SUFFIX=${CIRCLE_WORKFLOW_ID:0:7}
               BACKEND_PUBLIC_IP=$(aws ec2 describe-instances \
-                  --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
-                  --query 'Reservations[].Instances[].PublicIpAddress' \
-                  --output text)
+               --filters "Name=tag:aws:cloudformation:stack-name,Values=udapeople-backend-${STACK_SUFFIX}" "Name=instance-state-name,Values=running" \
+              --query 'Reservations[].Instances[].PublicIpAddress' \
+              --output text)
 
               # Check if BACKEND_PUBLIC_IP is empty
               if [ -z "$BACKEND_PUBLIC_IP" ]; then
