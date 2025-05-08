@@ -502,46 +502,54 @@ jobs:
       # - revert-migrations
 
   smoke-test:
-      docker:
-        - image: python:3.7-alpine3.11
-      steps:
-        - attach_workspace:
-            at: ~/
-        - run:
-            name: Install dependencies
-            command: |
-              apk add --update curl
-              pip install awscli
-        - run:
-            name: Package frontend app
-            command: |
-              if curl -s http://udapeople-prod-${CIRCLE_WORKFLOW_ID:0:7}.s3-website.eu-central-1.amazonaws.com/ | grep "Welcome"
-              then
-              return 0
-              else
-              return 1
-              fi
-        # - destroy_environment:
-        #     workflow_id: "${CIRCLE_WORKFLOW_ID:0:7}"
-        # - undo_migrations
+    docker:
+      - image: python:3.7-alpine3.11
+    steps:
+      - attach_workspace:
+          at: ~/
+      - run:
+          name: Install dependencies
+          command: |
+            apk add --no-cache curl
+            pip install awscli
+      - run:
+          name: Smoke Test Frontend App # Renamed for clarity
+          command: |
+            # This command will exit 0 if "Welcome" is found, and 1 if not.
+            # CircleCI will automatically pass/fail the step based on this exit code.
+            curl -s "http://udapeople-prod-${CIRCLE_WORKFLOW_ID:0:7}.s3-website.eu-central-1.amazonaws.com/" | grep "Welcome"
+            echo "Smoke test check completed. If the step failed, 'Welcome' was not found."
+
 
   smoke-test-backend:
-      docker:
-        - image: python:3.7-alpine3.11
-      steps:
-        - attach_workspace:
-            at: ~/
-        - run:
-            name: Install dependencies
-            command: |
-              apk add --update curl
-              pip install awscli
-        - run:
-            name: Test backend app.
-            command: |
-              API_URL=`cat .circleci/outputs/backend_url.txt`
-              echo $API_URL
-              curl -s $API_URL/api/status
+    docker:
+      - image: python:3.7-alpine3.11
+    steps:
+      - attach_workspace:
+          at: ~/
+      - run:
+          name: Install deps & Test backend
+          command: |
+            apk add --no-cache --update curl
+            set -e
+
+            URL_FILE=".circleci/outputs/backend_url.txt"; EXPECTED='healthy'
+
+            # Try to read file; if cat fails or result is empty, error out.
+            # 2>/dev/null silences cat's "file not found" error, relying on our custom message.
+            if ! API_URL=$(cat "$URL_FILE" 2>/dev/null) || [ -z "$API_URL" ]; then
+              echo "Error: $URL_FILE not found or is empty." >&2
+              exit 1
+            fi
+            TARGET_URL="${API_URL}/api/status"
+            echo "Testing $TARGET_URL for '$EXPECTED'..."
+
+            if curl -sf "$TARGET_URL" | grep -qF "$EXPECTED"; then
+              echo "PASS: Test successful." # Shortened success message
+            else
+              echo "FAIL: Test failed for $TARGET_URL (expected '$EXPECTED')." >&2 # More specific fail
+              exit 1
+            fi
 
 #   cloudfront-update:
 #     docker:
