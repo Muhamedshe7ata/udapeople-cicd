@@ -87,16 +87,38 @@
 - name: Install specific Node.js LTS version (e.g., Node 20) and set as default
   become: true
   become_user: ubuntu
-  shell: |
-    echo "Test simple script"
-    exit 0 # Explicitly exit successfully
+  shell: |  # Ensure no trailing spaces here, and script below is indented
+    set -e # Exit immediately if a command exits with a non-zero status.
+    export NVM_DIR="/home/ubuntu/.nvm"
+    # Source NVM into the current shell environment
+    if [ -s "$NVM_DIR/nvm.sh" ]; then
+      . "$NVM_DIR/nvm.sh"
+      echo "NVM sourced for Node installation."
+    else
+      echo "NVM script not found at $NVM_DIR/nvm.sh, cannot proceed." >&2
+      exit 1
+    fi
+    
+    # Specify the Node version you want to install and set as default
+    # 'lts/iron' is Node 20. You can use a specific version like "v20.11.1".
+    NODE_VERSION_TO_INSTALL="lts/iron" 
+    
+    echo "Attempting to install Node.js version: $NODE_VERSION_TO_INSTALL and set as default..."
+    nvm install "$NODE_VERSION_TO_INSTALL" # Install the version
+    nvm alias default "$NODE_VERSION_TO_INSTALL" # Create/update the 'default' alias
+    nvm use default # Switch to use this version for the current shell
+    
+    echo "NVM setup complete. Currently using Node version: $(node -v), NPM version: $(npm -v)"
   args:
     executable: /bin/bash
   environment:
-    HOME: /home/ubuntu
+    HOME: /home/ubuntu # NVM needs HOME to be set correctly
   register: nvm_node_install
-  changed_when: false # It won't change anything for this test
-
+  # Refined changed_when to be more reliable
+  changed_when: >
+    "Now using node" in nvm_node_install.stdout or
+    ("is already installed" not in nvm_node_install.stdout and "Checksums matched" in nvm_node_install.stdout) or
+    ("alias default -> " + NODE_VERSION_TO_INSTALL) in nvm_node_install.stdout
 
 - name: Show Node and NPM versions installed via NVM
   ansible.builtin.debug:
