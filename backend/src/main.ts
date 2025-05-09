@@ -90,3 +90,12 @@ bootstrap()
   });
 
 console.log('[NEST-MAIN] Script execution theoretically finished (after bootstrap call).');
+// ecosystem.config.js
+module.exports = {
+  apps: [{
+    name: "my-backend-app",
+    script: "dist/main.js",
+    exec_interpreter: "/home/ubuntu/.nvm/versions/node/v20.11.1/bin/node", // Example path
+    // ... rest of your config
+  }]
+};
