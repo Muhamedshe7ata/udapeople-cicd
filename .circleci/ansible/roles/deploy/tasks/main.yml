@@ -14,7 +14,7 @@
   ansible.builtin.unarchive:
     src: artifact.tar.gz
     dest: /home/ubuntu/backend-app
-    remote_src: no
+    remote_src: no # This means src is from the Ansible controller
   become: true
 
 - name: Ensure correct ownership of unarchived backend files
@@ -45,17 +45,16 @@
 - name: Download and install NVM for user 'ubuntu'
   ansible.builtin.shell: |
     export NVM_DIR="/home/ubuntu/.nvm"
-    mkdir -p "$NVM_DIR"
+    mkdir -p "$NVM_DIR" # Ensure NVM directory exists
     curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
   args:
     executable: /bin/bash
+    creates: /home/ubuntu/.nvm/nvm.sh # More reliable than checking nvm_check.stat.exists after the fact
   become: true
   become_user: ubuntu
   environment:
-    HOME: /home/ubuntu
-  when: not nvm_check.stat.exists
-  register: nvm_install_result
-  changed_when: nvm_install_result.stdout is defined and 'already installed' not in nvm_install_result.stdout
+    HOME: /home/ubuntu # NVM install script might need HOME
+  changed_when: true # Assume changed if this task runs, or refine with register and stdout checks
 
 - name: Ensure NVM sourcing lines are in .bashrc for user 'ubuntu'
   ansible.builtin.lineinfile:
@@ -85,36 +84,51 @@
     state: present
   become: true
 
-- name: Install latest LTS Node.js and set as default using NVM for user 'ubuntu'
+- name: Install specific Node.js LTS version (e.g., Node 20) and set as default
   become: true
   become_user: ubuntu
   shell: |
-    set -e
+    set -e # Exit immediately if a command exits with a non-zero status.
     export NVM_DIR="/home/ubuntu/.nvm"
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    nvm install --lts
-    nvm alias default lts/*
-    nvm use default
+    # Source NVM into the current shell environment
+    if [ -s "$NVM_DIR/nvm.sh" ]; then
+      . "$NVM_DIR/nvm.sh"
+    else
+      echo "NVM script not found, cannot proceed." >&2
+      exit 1
+    fi
+    
+    # Install a specific LTS version, e.g., the latest Node 20.x
+    # You can change 'lts/iron' to a specific version like 'v20.11.1' if needed.
+    # 'lts/iron' refers to Node 20. If Node 22 becomes LTS and you want 20, use 'v20.x.x' or a specific version.
+    NODE_VERSION_TO_INSTALL="lts/iron" # Or "v20.11.1" for exact version
+    
+    nvm install "$NODE_VERSION_TO_INSTALL"
+    nvm alias default "$NODE_VERSION_TO_INSTALL" # Set it as default
+    nvm use default # Ensure it's used for subsequent commands in this script block
+    
     echo "NVM setup complete. Node version: $(node -v), NPM version: $(npm -v)"
   args:
     executable: /bin/bash
   environment:
-    HOME: /home/ubuntu
-    NVM_DIR: /home/ubuntu/.nvm
+    HOME: /home/ubuntu # NVM operations often need HOME
+    # NVM_DIR is set within the script
   register: nvm_node_install
-  changed_when: "nvm_node_install.stdout.find('Now using node') != -1 or nvm_node_install.stdout.find('Checksums matched') != -1"
+  changed_when: "'Now using node' in nvm_node_install.stdout or 'is already installed' not in nvm_node_install.stdout"
+
 
 - name: Show Node and NPM versions installed via NVM
   ansible.builtin.debug:
-    var: nvm_node_install.stdout_lines
-    verbosity: 1
+    msg: "Node install output: {{ nvm_node_install.stdout_lines | join(' ') }}"
+  when: nvm_node_install.stdout_lines is defined
 
-- name: Installing Node Dependencies using nvm exec
+- name: Installing Node Dependencies using NVM default Node
   ansible.builtin.shell: |
     set -e
     export NVM_DIR="/home/ubuntu/.nvm"
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    nvm exec npm install
+    if [ -s "$NVM_DIR/nvm.sh" ]; then . "$NVM_DIR/nvm.sh"; else echo "NVM not found" >&2; exit 1; fi
+    nvm use default # Ensure we are using the default (LTS) Node version
+    npm ci --omit=dev # Use npm ci for faster, more reliable installs from package-lock.json
   args:
     executable: /bin/bash
     chdir: /home/ubuntu/backend-app
@@ -122,127 +136,128 @@
   become_user: ubuntu
   environment:
     HOME: /home/ubuntu
-    NVM_DIR: /home/ubuntu/.nvm
 
-- name: Installing PM2 globally using nvm exec
+- name: Installing PM2 globally using NVM default Node
   ansible.builtin.shell: |
     set -e
     export NVM_DIR="/home/ubuntu/.nvm"
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    nvm exec npm install pm2 -g
+    if [ -s "$NVM_DIR/nvm.sh" ]; then . "$NVM_DIR/nvm.sh"; else echo "NVM not found" >&2; exit 1; fi
+    nvm use default # Ensure PM2 is installed under the default (LTS) Node version
+    # Check if PM2 is already installed for this Node version to avoid reinstallation if not needed
+    if ! nvm exec --silent pm2 --version > /dev/null 2>&1; then
+      nvm exec npm install pm2@latest -g
+    else
+      echo "PM2 already installed for current Node version."
+    fi
   args:
     executable: /bin/bash
   become: true
   become_user: ubuntu
   environment:
     HOME: /home/ubuntu
-    NVM_DIR: /home/ubuntu/.nvm
   register: pm2_global_install
-  changed_when: pm2_global_install.stdout is defined and ("added " in pm2_global_install.stdout or "changed " in pm2_global_install.stdout)
+  changed_when: "'added' in pm2_global_install.stdout or '/pm2' in pm2_global_install.stdout" # Heuristic for change
 
-# ... (previous tasks in your roles/deploy/tasks/main.yml) ...
-
-# TASK [deploy : Fail if ecosystem.config.js is missing] *************************
-- name: Fail if ecosystem.config.js is missing # Or whatever this task actually does to check
+- name: Check if ecosystem.config.js exists
   ansible.builtin.stat:
-    path: "/home/ubuntu/backend-app/ecosystem.config.js" # Adjust path if needed
+    path: "/home/ubuntu/backend-app/ecosystem.config.js"
   register: ecosystem_config_file
-  become: true
+  become: true # stat might need sudo if perms are restrictive, though usually not for ubuntu user's own files
   become_user: ubuntu
 
-# TASK [deploy : Abort if ecosystem.config.js not found] *************************
 - name: Abort if ecosystem.config.js not found
   ansible.builtin.fail:
     msg: "ecosystem.config.js not found at /home/ubuntu/backend-app/ecosystem.config.js. Aborting."
   when: not ecosystem_config_file.stat.exists
 
-# TASK [deploy : Ensuring app is started/restarted with PM2 using nvm exec] ******
-# ... other tasks ...
-
-# ... other tasks ...
-
-- name: Ensuring app is started/restarted with PM2 using specified Node version
-  ansible.builtin.shell: |  # Make sure no trailing spaces on this line
-    # All lines of the script below MUST be indented more than 'ansible.builtin.shell:'
+# --- THIS IS THE KEY TASK WE'VE BEEN WORKING ON ---
+- name: Restart or start the application using PM2 (with NVM default Node)
+  ansible.builtin.shell: |
+    set -e # Exit on error
     export NVM_DIR="/home/ubuntu/.nvm"
+    # Source NVM to make nvm, node, npm, pm2 commands available from the NVM installation
     if [ -s "$NVM_DIR/nvm.sh" ]; then
-      . "$NVM_DIR/nvm.sh"  # Source NVM (using . instead of \. should be fine here)
-      echo "NVM sourced successfully."
+      . "$NVM_DIR/nvm.sh"
+      echo "NVM sourced successfully for PM2 task."
     else
-      echo "NVM script not found at $NVM_DIR/nvm.sh" >&2
-      exit 1 # Fail if NVM can't be sourced
+      echo "NVM script not found at $NVM_DIR/nvm.sh. Cannot run PM2." >&2
+      exit 1
     fi
 
-    cd /home/ubuntu/backend-app || exit 1 # Change to app dir or fail
+    # Ensure we are using the NVM default (LTS) Node version for running PM2 commands
+    # This should align with how PM2 was installed and how node_modules were installed.
+    nvm use default || (echo "Failed to switch to NVM default Node version" >&2 && exit 1)
+    
+    echo "Attempting PM2 operations with Node: $(node -v) and PM2: $(nvm exec --silent pm2 --version || echo 'PM2 not found in NVM path')"
 
-    # Ensure the target Node version is installed by NVM
-    # Using 'nvm ls' instead of 'nvm list' for scripting, and check specific version
-    if ! nvm ls v20.11.1 --no-alias --no-colors >/dev/null 2>&1; then
-      echo "Node v20.11.1 not found by NVM, attempting to install..." >&2
-      nvm install v20.11.1 || (echo "Failed to install Node v20.11.1" >&2 && exit 1)
-    fi
+    # Now, PM2 commands will use the Node version activated by "nvm use default"
+    # If your ecosystem.config.js has an "exec_interpreter" line, PM2 will use THAT
+    # to run your actual app script (dist/main.js).
+    # If "exec_interpreter" is NOT in ecosystem.config.js, PM2 will use the
+    # current Node (from "nvm use default") to run your app script.
+    # For consistency, it's good if these match.
 
-    nvm use v20.11.1 || (echo "Failed to use Node v20.11.1" >&2 && exit 1) # Explicitly use v20.11.1
-    echo "Using Node version: $(node --version)"
-    echo "NPM version: $(npm --version)"
-    echo "PM2 path: $(which pm2)" # See where pm2 is found after nvm use
-
-    # Attempt to restart, if it fails (e.g., app not found), then start.
-    # Using --env production explicitly on both.
-    if pm2 restart ecosystem.config.js --env production --update-env; then
+    if nvm exec --silent pm2 restart ecosystem.config.js --env production --update-env; then
       echo "PM2 restart successful or app was already running and updated."
     else
       echo "PM2 restart failed (app might not be running), attempting pm2 start..."
-      pm2 start ecosystem.config.js --env production || (echo "PM2 start also failed." >&2 && exit 1)
+      nvm exec --silent pm2 start ecosystem.config.js --env production || (echo "PM2 start also failed." >&2 && exit 1)
     fi
   args:
     executable: /bin/bash
-    chdir: /home/ubuntu/backend-app # This chdir might be redundant if 'cd' is in script, but harmless
-  become: yes
+    chdir: /home/ubuntu/backend-app # Ensures PM2 looks for ecosystem.config.js in the right place
+  become: true
   become_user: ubuntu
+  environment:
+    HOME: /home/ubuntu # Important for NVM and PM2_HOME
+    # PM2_HOME: /home/ubuntu/.pm2 # PM2 might also need PM2_HOME if it's not default
   register: pm2_action_result
-  # Adjust changed_when and failed_when as needed based on PM2's actual output
   changed_when: >
     "restarted" in pm2_action_result.stdout or
     "App [my-backend-app] succesfully started" in pm2_action_result.stdout or
-    "successfully started" in pm2_action_result.stdout
-  failed_when: pm2_action_result.rc != 0 and not ("already launched" in pm2_action_result.stdout or "already started" in pm2_action_result.stdout)
+    "successfully started" in pm2_action_result.stdout or
+    "[PM2] App [my-backend-app] launched" in pm2_action_result.stdout # Another PM2 success message
+  failed_when: >
+    pm2_action_result.rc != 0 and not (
+      "already launched" in pm2_action_result.stdout or
+      "already started" in pm2_action_result.stdout or
+      "already running" in pm2_action_result.stdout # Another PM2 already running message
+    )
 
-# ... other tasks ...
+# This was a duplicated block in your original paste, I've removed it.
 
-# TASK [deploy : Print PM2 start/restart message] ********************************
-- name: Print PM2 start/restart message
-  ansible.builtin.debug:
-    msg: "{{ pm2_start_restart_result.stdout_lines }}"
-  when: pm2_start_restart_result.stdout_lines is defined and pm2_start_restart_result.stdout_lines | length > 0
-  # Your original condition for this skipped task might be different
+# This task was for a variable that isn't defined in the corrected PM2 task above.
+# If you need to print PM2 status, use pm2_action_result or run a separate pm2 list task.
+# - name: Print PM2 start/restart message
+#   ansible.builtin.debug:
+#     msg: "{{ pm2_action_result.stdout_lines }}" # Use the correct register variable
+#   when: pm2_action_result.stdout_lines is defined and pm2_action_result.stdout_lines | length > 0
 
+# These tasks for getting node/pm2 paths and setting facts are good for advanced PM2 service setup
+# but are not strictly necessary for the PM2 start/restart task itself if we use "nvm use default"
+# and then "nvm exec pm2 ...". I'm keeping them as you had them, but ensure they work as intended.
 
-# roles/deploy/tasks/main.yml (or relevant tasks file)
-
-# ... (previous tasks)
-
-- name: Get Node path under NVM for user 'ubuntu'
+- name: Get Node path under NVM for user 'ubuntu' (using default)
   ansible.builtin.shell:
     cmd: |
       export NVM_DIR="/home/ubuntu/.nvm"
       [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-      nvm use default >/dev/null 2>&1 || nvm use lts/* >/dev/null 2>&1
-      nvm exec which node
+      nvm use default >/dev/null 2>&1 # Use the default NVM Node
+      nvm exec which node # Get path of node under this NVM version
     executable: /bin/bash
   become: true
   become_user: ubuntu
   register: node_path_result
   changed_when: false
-  check_mode: no
+  check_mode: no # Run even in check mode to get the path
 
-- name: Get PM2 path under NVM for user 'ubuntu'
+- name: Get PM2 path under NVM for user 'ubuntu' (using default)
   ansible.builtin.shell:
     cmd: |
       export NVM_DIR="/home/ubuntu/.nvm"
       [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-      nvm use default >/dev/null 2>&1 || nvm use lts/* >/dev/null 2>&1
-      nvm exec which pm2
+      nvm use default >/dev/null 2>&1 # Use the default NVM Node
+      nvm exec which pm2 # Get path of pm2 under this NVM version
     executable: /bin/bash
   become: true
   become_user: ubuntu
@@ -250,36 +265,47 @@
   changed_when: false
   check_mode: no
 
-# MODIFIED TASK
 - name: Set facts for Node and PM2 paths
   ansible.builtin.set_fact:
-    node_path_under_nvm: "{{ (node_path_result.stdout | trim).split('\n')[-1] }}"
-    pm2_path_under_nvm: "{{ (pm2_path_result.stdout | trim).split('\n')[-1] }}"
+    node_path_under_nvm: "{{ (node_path_result.stdout | trim) }}" # Simpler, assumes which returns one line
+    pm2_path_under_nvm: "{{ (pm2_path_result.stdout | trim) }}"
+  when: node_path_result.stdout is defined and pm2_path_result.stdout is defined
 
 - name: Fail if Node or PM2 paths were not found
   ansible.builtin.fail:
-    msg: "Critical: Could not find pm2 or node under NVM for user ubuntu. Node path: '{{ node_path_under_nvm }}', PM2 path: '{{ pm2_path_under_nvm }}'"
-  when: node_path_under_nvm == "" or pm2_path_under_nvm == "" or not node_path_under_nvm.startswith('/') or not pm2_path_under_nvm.startswith('/')
+    msg: "Critical: Could not find pm2 or node under NVM for user ubuntu. Node path: '{{ node_path_under_nvm | default('NOT_FOUND') }}', PM2 path: '{{ pm2_path_under_nvm | default('NOT_FOUND') }}'"
+  when: >
+    node_path_under_nvm is not defined or node_path_under_nvm == "" or
+    pm2_path_under_nvm is not defined or pm2_path_under_nvm == "" or
+    not node_path_under_nvm.startswith('/') or
+    not pm2_path_under_nvm.startswith('/')
 
-- name:  Show found paths (optional, good for verification)
+- name: Show found paths (optional, good for verification)
   ansible.builtin.debug:
     msg: |
       Node path for PM2 startup: {{ node_path_under_nvm }}
       PM2 path for PM2 startup: {{ pm2_path_under_nvm }}
-  when: node_path_under_nvm != "" and pm2_path_under_nvm != ""
-  # MODIFIED TASK
+  when: node_path_under_nvm is defined and node_path_under_nvm != "" and pm2_path_under_nvm is defined and pm2_path_under_nvm != ""
+
 - name: Configure pm2 to start as service on system boot
-  block:
-    - ansible.builtin.command:
-        argv:
-          - "{{ pm2_path_under_nvm }}" # This will now be the clean path
-          - startup
-          - systemd
-          - -u
-          - ubuntu
-          - --hp
-          - /home/ubuntu
-      environment: # <<< MOVED HERE and renamed from 'env'
-        PATH: "{{ ansible_env.PATH }}:{{ node_path_under_nvm | dirname }}:{{ pm2_path_under_nvm | dirname }}"
-      become: true
-  when: pm2_path_under_nvm != "" and node_path_under_nvm != "" and node_path_under_nvm.startswith('/') and pm2_path_under_nvm.startswith('/')
+  # This task uses the pm2_path_under_nvm fact.
+  # Ensure the previous tasks correctly set this fact.
+  ansible.builtin.command: # Using ansible.builtin.command is safer if args are well-defined
+    argv:
+      - "{{ pm2_path_under_nvm }}" # Path to pm2 from NVM
+      - startup
+      - systemd # Or appropriate init system
+      - -u
+      - ubuntu
+      - --hp
+      - /home/ubuntu
+  environment:
+    PATH: "{{ ansible_env.PATH }}:{{ (node_path_under_nvm | default('')) | dirname }}:{{ (pm2_path_under_nvm | default('')) | dirname }}"
+    # Adding node and pm2 bin directories to PATH for the command execution environment
+  become: true # pm2 startup usually requires root
+  when: > # Only run if paths were successfully determined
+    pm2_path_under_nvm is defined and pm2_path_under_nvm != "" and
+    node_path_under_nvm is defined and node_path_under_nvm != "" and
+    node_path_under_nvm.startswith('/') and pm2_path_under_nvm.startswith('/')
+  register: pm2_startup_result
+  changed_when: "'systemd' in pm2_startup_result.stdout or 'successfully' in pm2_startup_result.stdout" # Heuristic
