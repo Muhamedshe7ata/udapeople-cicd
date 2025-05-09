@@ -26,7 +26,23 @@
 // });
 
 // console.log('[MINIMAL-APP] End of main.ts script. Server should be listening.');
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[GLOBAL] Unhandled Rejection at:', promise, 'reason:', reason);
+  // Log more details about the reason if it's an error object
+  if (reason instanceof Error) {
+    console.error('[GLOBAL] Unhandled Rejection reason stack:', reason.stack);
+  }
+  process.exit(1); // Force exit with error
+});
 
+process.on('uncaughtException', (error) => {
+  console.error('[GLOBAL] Uncaught Exception:', error);
+  console.error('[GLOBAL] Uncaught Exception stack:', error.stack);
+  process.exit(1); // Force exit with error
+});
+
+// THEN your import 'reflect-metadata';
+// THEN the rest of your main.ts
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './modules/app/app.module'; // Adjust path if needed
 
