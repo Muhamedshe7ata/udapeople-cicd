@@ -157,20 +157,50 @@
   when: not ecosystem_config_file.stat.exists
 
 # TASK [deploy : Ensuring app is started/restarted with PM2 using nvm exec] ******
-- name: Ensuring app is started/restarted with PM2 using nvm exec
-  ansible.builtin.shell: # Or command, depending on your original task
-    cmd: |
-      export NVM_DIR="/home/ubuntu/.nvm"
-      [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-      cd /home/ubuntu/backend-app && nvm exec pm2 restart ecosystem.config.js --update-env || nvm exec pm2 start ecosystem.config.js
-    executable: /bin/bash
+# ... other tasks ...
+
+- name: Ensuring app is started/restarted with PM2 using specified Node version # <--- Updated name for clarity
+  ansible.builtin.shell: |  # Switched to shell module for easier multiline and nvm use
+    export NVM_DIR="/home/ubuntu/.nvm"
+    if [ -s "$NVM_DIR/nvm.sh" ]; then
+      \. "$NVM_DIR/nvm.sh"  # Source NVM
+      echo "NVM sourced successfully."
+    else
+      echo "NVM script not found at $NVM_DIR/nvm.sh" >&2
+      exit 1 # Fail if NVM can't be sourced
+    fi
+
+    cd /home/ubuntu/backend-app || exit 1 # Change to app dir or fail
+
+    # Ensure the target Node version is installed by NVM
+    if ! nvm list v20.11.1 >/dev/null 2>&1; then
+      echo "Node v20.11.1 not found by NVM, attempting to install..." >&2
+      nvm install v20.11.1 || (echo "Failed to install Node v20.11.1" >&2 && exit 1)
+    fi
+
+    nvm use v20.11.1 || (echo "Failed to use Node v20.11.1" >&2 && exit 1) # Explicitly use v20.11.1
+    echo "Using Node version: $(node --version)"
+    echo "NPM version: $(npm --version)"
+    echo "PM2 path: $(which pm2)" # See where pm2 is found after nvm use
+
+    # Attempt to restart, if it fails (e.g., app not found), then start.
+    # Using --env production explicitly on both.
+    if pm2 restart ecosystem.config.js --env production --update-env; then
+      echo "PM2 restart successful or app was already running and updated."
+    else
+      echo "PM2 restart failed (app might not be running), attempting pm2 start..."
+      pm2 start ecosystem.config.js --env production || (echo "PM2 start also failed." >&2 && exit 1)
+    fi
   args:
-    chdir: /home/ubuntu/backend-app
-  become: true
-  become_user: ubuntu
-  register: pm2_start_restart_result
-  changed_when: "'App already running' not in pm2_start_restart_result.stdout and pm2_start_restart_result.rc == 0"
-  # Add other necessary parameters from your original task
+    executable: /bin/bash # Explicitly use bash for the script block
+    chdir: /home/ubuntu/backend-app # Ensures commands run in the correct directory context from the start
+  become: yes # Keep this if your PM2 operations require sudo
+  become_user: ubuntu # Run as the ubuntu user
+  register: pm2_action_result
+  changed_when: "'restart' in pm2_action_result.stdout or 'App [my-backend-app] succesfully started' in pm2_action_result.stdout" # Adjust based on actual success messages
+  failed_when: pm2_action_result.rc != 0 and "already launched" not in pm2_action_result.stdout # More robust failure condition
+
+# ... other tasks ...
 
 # TASK [deploy : Print PM2 start/restart message] ********************************
 - name: Print PM2 start/restart message
