@@ -267,9 +267,11 @@
 
 - name: Set facts for Node and PM2 paths
   ansible.builtin.set_fact:
-    node_path_under_nvm: "{{ (node_path_result.stdout | trim) }}" # Simpler, assumes which returns one line
-    pm2_path_under_nvm: "{{ (pm2_path_result.stdout | trim) }}"
-  when: node_path_result.stdout is defined and pm2_path_result.stdout is defined
+    # Extracts the last line of stdout (the path) and trims whitespace
+    node_path_under_nvm: "{{ (node_path_result.stdout_lines | last | trim) }}"
+    pm2_path_under_nvm:  "{{ (pm2_path_result.stdout_lines | last | trim) }}"
+  when: node_path_result.stdout_lines is defined and node_path_result.stdout_lines | length > 0 and
+        pm2_path_result.stdout_lines is defined and pm2_path_result.stdout_lines | length > 0
 
 - name: Fail if Node or PM2 paths were not found
   ansible.builtin.fail:
