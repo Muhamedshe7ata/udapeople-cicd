@@ -2,7 +2,7 @@ module.exports = {
   apps: [{
     name: "my-backend-app", // Your application's name in PM2
     script: "dist/main.js", // Path to your compiled NestJS entry point
-    exec_interpreter: "/home/ubuntu/.nvm/versions/node/v20.11.1/bin/node", // Specifies Node.js v20.11.1
+    
     instances: 1, // Number of instances to run (1 for "fork" mode, or "max" for cluster mode)
     exec_mode: "fork", // "fork" or "cluster". "fork" is simpler for single instances.
     cwd: "./", // Current working directory for the app (usually where ecosystem.config.js is)
