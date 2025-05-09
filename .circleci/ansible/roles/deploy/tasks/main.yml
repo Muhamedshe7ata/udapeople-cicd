@@ -152,8 +152,12 @@
   when: not ecosystem_config_file.stat.exists
 
 # --- THIS IS THE KEY TASK WE'VE BEEN WORKING ON ---
+# (Other tasks before this one)
+
+# --- THIS IS THE KEY TASK WE'VE BEEN WORKING ON ---
 - name: Restart or start the application using PM2 (with NVM default Node)
   ansible.builtin.shell: |
+    # ALL SCRIPT LINES BELOW MUST BE INDENTED (e.g., by 2 spaces more than 'ansible.builtin.shell:')
     set -e # Exit on error
     export NVM_DIR="/home/ubuntu/.nvm"
     # Source NVM to make nvm, node, npm, pm2 commands available from the NVM installation
@@ -166,17 +170,9 @@
     fi
 
     # Ensure we are using the NVM default (LTS) Node version for running PM2 commands
-    # This should align with how PM2 was installed and how node_modules were installed.
     nvm use default || (echo "Failed to switch to NVM default Node version" >&2 && exit 1)
     
     echo "Attempting PM2 operations with Node: $(node -v) and PM2: $(nvm exec --silent pm2 --version || echo 'PM2 not found in NVM path')"
-
-    # Now, PM2 commands will use the Node version activated by "nvm use default"
-    # If your ecosystem.config.js has an "exec_interpreter" line, PM2 will use THAT
-    # to run your actual app script (dist/main.js).
-    # If "exec_interpreter" is NOT in ecosystem.config.js, PM2 will use the
-    # current Node (from "nvm use default") to run your app script.
-    # For consistency, it's good if these match.
 
     if nvm exec --silent pm2 restart ecosystem.config.js --env production --update-env; then
       echo "PM2 restart successful or app was already running and updated."
@@ -186,24 +182,25 @@
     fi
   args:
     executable: /bin/bash
-    chdir: /home/ubuntu/backend-app # Ensures PM2 looks for ecosystem.config.js in the right place
+    chdir: /home/ubuntu/backend-app
   become: true
   become_user: ubuntu
   environment:
-    HOME: /home/ubuntu # Important for NVM and PM2_HOME
-    # PM2_HOME: /home/ubuntu/.pm2 # PM2 might also need PM2_HOME if it's not default
+    HOME: /home/ubuntu
   register: pm2_action_result
   changed_when: >
     "restarted" in pm2_action_result.stdout or
     "App [my-backend-app] succesfully started" in pm2_action_result.stdout or
     "successfully started" in pm2_action_result.stdout or
-    "[PM2] App [my-backend-app] launched" in pm2_action_result.stdout # Another PM2 success message
+    "[PM2] App [my-backend-app] launched" in pm2_action_result.stdout
   failed_when: >
     pm2_action_result.rc != 0 and not (
       "already launched" in pm2_action_result.stdout or
       "already started" in pm2_action_result.stdout or
-      "already running" in pm2_action_result.stdout # Another PM2 already running message
+      "already running" in pm2_action_result.stdout
     )
+
+# (Other tasks after this one, like your Get Node/PM2 path tasks)
 
 # This was a duplicated block in your original paste, I've removed it.
 
