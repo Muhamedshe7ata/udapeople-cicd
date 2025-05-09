@@ -1,7 +1,7 @@
-// src/main.ts (TEMPORARY - for extreme debugging)
+// src/main.ts (TEMPORARY - for extreme debugging - CORRECTED)
 import * as http from 'http';
 
-const port = process.env.PORT || 3030; // Get port from env, default to 3030
+const port = parseInt(process.env.PORT || "3030", 10); // Ensure port is a number
 const host = '0.0.0.0';
 
 console.log(`[MINIMAL-APP] Node.js version: ${process.version}`);
@@ -14,6 +14,7 @@ const server = http.createServer((req, res) => {
   res.end('Minimal App OK\n');
 });
 
+// Corrected server.listen call:
 server.listen(port, host, () => {
   console.log(`[MINIMAL-APP] Server is listening on ${host}:${port}`);
   console.log(`[MINIMAL-APP] PM2 should keep this process alive.`);
@@ -24,11 +25,4 @@ server.on('error', (e) => {
   process.exit(1); // Exit with error if server fails to start
 });
 
-// Keep the process alive - usually not needed if server.listen is successful
-// but adding just in case of very odd PM2 behavior with extremely fast exits.
-// setInterval(() => {
-//   console.log('[MINIMAL-APP] Heartbeat...');
-// }, 60000); // Log every minute
-
 console.log('[MINIMAL-APP] End of main.ts script. Server should be listening.');
-
