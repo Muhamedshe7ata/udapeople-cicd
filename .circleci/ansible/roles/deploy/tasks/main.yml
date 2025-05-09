@@ -88,33 +88,14 @@
   become: true
   become_user: ubuntu
   shell: |
-    set -e # Exit immediately if a command exits with a non-zero status.
-    export NVM_DIR="/home/ubuntu/.nvm"
-    # Source NVM into the current shell environment
-    if [ -s "$NVM_DIR/nvm.sh" ]; then
-      . "$NVM_DIR/nvm.sh"
-    else
-      echo "NVM script not found, cannot proceed." >&2
-      exit 1
-    fi
-    
-    # Install a specific LTS version, e.g., the latest Node 20.x
-    # You can change 'lts/iron' to a specific version like 'v20.11.1' if needed.
-    # 'lts/iron' refers to Node 20. If Node 22 becomes LTS and you want 20, use 'v20.x.x' or a specific version.
-    NODE_VERSION_TO_INSTALL="lts/iron" # Or "v20.11.1" for exact version
-    
-    nvm install "$NODE_VERSION_TO_INSTALL"
-    nvm alias default "$NODE_VERSION_TO_INSTALL" # Set it as default
-    nvm use default # Ensure it's used for subsequent commands in this script block
-    
-    echo "NVM setup complete. Node version: $(node -v), NPM version: $(npm -v)"
+    echo "Test simple script"
+    exit 0 # Explicitly exit successfully
   args:
     executable: /bin/bash
   environment:
-    HOME: /home/ubuntu # NVM operations often need HOME
-    # NVM_DIR is set within the script
+    HOME: /home/ubuntu
   register: nvm_node_install
-  changed_when: "'Now using node' in nvm_node_install.stdout or 'is already installed' not in nvm_node_install.stdout"
+  changed_when: false # It won't change anything for this test
 
 
 - name: Show Node and NPM versions installed via NVM
