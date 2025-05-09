@@ -159,11 +159,14 @@
 # TASK [deploy : Ensuring app is started/restarted with PM2 using nvm exec] ******
 # ... other tasks ...
 
-- name: Ensuring app is started/restarted with PM2 using specified Node version # <--- Updated name for clarity
-  ansible.builtin.shell: |  # Switched to shell module for easier multiline and nvm use
+# ... other tasks ...
+
+- name: Ensuring app is started/restarted with PM2 using specified Node version
+  ansible.builtin.shell: |  # Make sure no trailing spaces on this line
+    # All lines of the script below MUST be indented more than 'ansible.builtin.shell:'
     export NVM_DIR="/home/ubuntu/.nvm"
     if [ -s "$NVM_DIR/nvm.sh" ]; then
-      \. "$NVM_DIR/nvm.sh"  # Source NVM
+      . "$NVM_DIR/nvm.sh"  # Source NVM (using . instead of \. should be fine here)
       echo "NVM sourced successfully."
     else
       echo "NVM script not found at $NVM_DIR/nvm.sh" >&2
@@ -173,7 +176,8 @@
     cd /home/ubuntu/backend-app || exit 1 # Change to app dir or fail
 
     # Ensure the target Node version is installed by NVM
-    if ! nvm list v20.11.1 >/dev/null 2>&1; then
+    # Using 'nvm ls' instead of 'nvm list' for scripting, and check specific version
+    if ! nvm ls v20.11.1 --no-alias --no-colors >/dev/null 2>&1; then
       echo "Node v20.11.1 not found by NVM, attempting to install..." >&2
       nvm install v20.11.1 || (echo "Failed to install Node v20.11.1" >&2 && exit 1)
     fi
@@ -192,13 +196,17 @@
       pm2 start ecosystem.config.js --env production || (echo "PM2 start also failed." >&2 && exit 1)
     fi
   args:
-    executable: /bin/bash # Explicitly use bash for the script block
-    chdir: /home/ubuntu/backend-app # Ensures commands run in the correct directory context from the start
-  become: yes # Keep this if your PM2 operations require sudo
-  become_user: ubuntu # Run as the ubuntu user
+    executable: /bin/bash
+    chdir: /home/ubuntu/backend-app # This chdir might be redundant if 'cd' is in script, but harmless
+  become: yes
+  become_user: ubuntu
   register: pm2_action_result
-  changed_when: "'restart' in pm2_action_result.stdout or 'App [my-backend-app] succesfully started' in pm2_action_result.stdout" # Adjust based on actual success messages
-  failed_when: pm2_action_result.rc != 0 and "already launched" not in pm2_action_result.stdout # More robust failure condition
+  # Adjust changed_when and failed_when as needed based on PM2's actual output
+  changed_when: >
+    "restarted" in pm2_action_result.stdout or
+    "App [my-backend-app] succesfully started" in pm2_action_result.stdout or
+    "successfully started" in pm2_action_result.stdout
+  failed_when: pm2_action_result.rc != 0 and not ("already launched" in pm2_action_result.stdout or "already started" in pm2_action_result.stdout)
 
 # ... other tasks ...
 
