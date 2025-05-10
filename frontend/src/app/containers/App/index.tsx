@@ -11,7 +11,7 @@ import '../../style.local.css';
 import style from '../../style.local.css';
 import { ToastContainer } from 'react-toastify';
 import ViewEmployee from 'app/containers/Employee/components/ViewEmployee';
-import { hot } from 'react-hot-loader/root';
+import { hot } from 'react-hot-loader';
 export namespace App {
   export interface Props extends RouteComponentProps<void> {}
 }
@@ -57,5 +57,5 @@ class App extends Component<App.Props> {
 }
 
 // export default connect()(hot(App));
-const HotApp = hot(App);
-export default connect()(HotApp);
+const ConnectedApp = connect(mapStateToProps, mapDispatchToProps)(App);
+export default hot(module)(ConnectedApp);
