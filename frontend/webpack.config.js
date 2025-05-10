@@ -27,15 +27,21 @@ module.exports = {
   },
   target: 'web',
   resolve: {
-    extensions: ['.js', '.ts', '.tsx'],
-    // Fix webpack's default behavior to not load packages with jsnext:main module
-    // (jsnext:main directs not usually distributable es6 format, but es6 sources)
-    mainFields: ['module', 'browser', 'main'],
-    alias: {
-      app: path.resolve(__dirname, 'src/app/'),
-      assets: path.resolve(__dirname, 'src/assets/'),
-      'react-dom': '@hot-loader/react-dom',
-    },
+  extensions: ['.js', '.ts', '.tsx'],
+  mainFields: ['module', 'browser', 'main'],
+  alias: {
+    app: path.resolve(__dirname, 'src/app/'),
+    assets: path.resolve(__dirname, 'src/assets/'),
+    // Option A: More targeted alias (if the direct alias is too broad)
+    // 'react-dom': process.env.NODE_ENV === 'production' ? 'react-dom' : '@hot-loader/react-dom',
+
+    // Option B: Let's try being more explicit about the path to @hot-loader/react-dom.
+    // This assumes @hot-loader/react-dom is indeed installed.
+    'react-dom': path.resolve(__dirname, './node_modules/@hot-loader/react-dom'),
+    // OR, if the above is too aggressive, revert to no alias for react-dom temporarily to see if build passes
+    // and the error in browser is ONLY the RHL misconfiguration.
+  },
+},
   },
   module: {
     rules: [
