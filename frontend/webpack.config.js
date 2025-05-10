@@ -43,18 +43,26 @@ module.exports = {
 module: {
     rules: [
       // .ts, .tsx
-      {
+        {
         test: /\.tsx?$/,
-        use: [
-          !isProduction && {
-            loader: 'babel-loader',
-            options: {
-              plugins: ['react-hot-loader/babel'],
-               plugins: !isProduction && new webpack.HotModuleReplacementPlugin(),
-            },
-          },
-          'ts-loader',
-        ].filter(Boolean),
+        use: (() => {
+          const loaders = ['ts-loader'];
+          if (!isProduction) {
+            loaders.unshift({ // Add babel-loader to the beginning of the array
+              loader: 'babel-loader',
+              options: {
+
+                   presets: [
+                     '@babel/preset-env',    // For modern JavaScript features
+                     '@babel/preset-react',   // For JSX
+                     '@babel/preset-typescript' // For TypeScript
+                   ],
+                   plugins: ['react-hot-loader/babel'],
+              },
+            });
+          }
+          return loaders;
+        })(),
       },
       // locale css
       {
