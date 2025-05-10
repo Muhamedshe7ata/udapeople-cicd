@@ -34,6 +34,7 @@ module.exports = {
     alias: {
       app: path.resolve(__dirname, 'src/app/'),
       assets: path.resolve(__dirname, 'src/assets/'),
+      'react-dom': '@hot-loader/react-dom',
     },
   },
   module: {
@@ -170,8 +171,10 @@ module.exports = {
       TITLE: process.env.TITLE || 'Welcome',
       API_URL: process.env.API_URL,
       WP_HELP_EMAIL: process.env.WP_HELP_EMAIL,
+      
     }),
-  ],
+    !isProduction && new webpack.HotModuleReplacementPlugin(), // <-- ADD THIS LINE
+     ].filter(Boolean),
   devServer: {
     contentBase: sourcePath,
     hot: true,
