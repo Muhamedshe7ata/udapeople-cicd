@@ -1,31 +1,22 @@
-// // src/main.ts (TEMPORARY - for extreme debugging - CORRECTED)
-// import * as http from 'http';
+import 'reflect-metadata'; // <--- THIS MUST BE THE VERY FIRST LINE OF ACTUAL CODE
 
-// const port = parseInt(process.env.PORT || "3030", 10); // Ensure port is a number
-// const host = '0.0.0.0';
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[GLOBAL] Unhandled Rejection at:', promise, 'reason:', reason);
+  if (reason instanceof Error) {
+    console.error('[GLOBAL] Unhandled Rejection reason stack:', reason.stack);
+  }
+  process.exit(1);
+});
 
-// console.log(`[MINIMAL-APP] Node.js version: ${process.version}`);
-// console.log(`[MINIMAL-APP] Attempting to start simple HTTP server on ${host}:${port}`);
-// console.log(`[MINIMAL-APP] Raw PORT env var: ${process.env.PORT}`);
+process.on('uncaughtException', (error) => {
+  console.error('[GLOBAL] Uncaught Exception:', error);
+  console.error('[GLOBAL] Uncaught Exception stack:', error.stack);
+  process.exit(1);
+});
 
-// const server = http.createServer((req, res) => {
-//   console.log(`[MINIMAL-APP] Received request: ${req.method} ${req.url}`);
-//   res.writeHead(200, { 'Content-Type': 'text/plain' });
-//   res.end('Minimal App OK\n');
-// });
-
-// // Corrected server.listen call:
-// server.listen(port, host, () => {
-//   console.log(`[MINIMAL-APP] Server is listening on ${host}:${port}`);
-//   console.log(`[MINIMAL-APP] PM2 should keep this process alive.`);
-// });
-
-// server.on('error', (e) => {
-//   console.error(`[MINIMAL-APP] Server error: ${e.message}`);
-//   process.exit(1); // Exit with error if server fails to start
-// });
-
-// console.log('[MINIMAL-APP] End of main.ts script. Server should be listening.');
+import { NestFactory } from '@nestjs/core';
+import { AppModule } from './modules/app/app.module'; // Your path
+// ... rest of your main.ts ...
 process.on('unhandledRejection', (reason, promise) => {
   console.error('[GLOBAL] Unhandled Rejection at:', promise, 'reason:', reason);
   // Log more details about the reason if it's an error object
@@ -42,9 +33,7 @@ process.on('uncaughtException', (error) => {
 });
 
 // THEN your import 'reflect-metadata';
-// THEN the rest of your main.ts
-import { NestFactory } from '@nestjs/core';
-import { AppModule } from './modules/app/app.module'; // Adjust path if needed
+// THEN the rest of your main.
 
 async function bootstrap() {
   console.log('[NEST-MAIN] Entered bootstrap function.');
