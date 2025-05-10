@@ -26,10 +26,10 @@ module.exports = {
     publicPath: process.env.FRONTEND_URL || '/',
   },
   target: 'web',
-   resolve: {
+ resolve: {
   modules: [
     path.resolve(__dirname, 'src'),
-    path.resolve(__dirname, 'node_modules'),
+    path.resolve(__dirname, 'node_modules'), // Good to be explicit
     'node_modules'
   ],
   extensions: ['.js', '.ts', '.tsx'],
@@ -37,7 +37,7 @@ module.exports = {
   alias: {
     app: path.resolve(__dirname, 'src/app/'),
     assets: path.resolve(__dirname, 'src/assets/'),
-    // NO ALIAS FOR 'react-dom'
+    // NO ALIAS FOR 'react-dom' <-- Correct for this attempt
   },
 },
 module: {
@@ -50,6 +50,7 @@ module: {
             loader: 'babel-loader',
             options: {
               plugins: ['react-hot-loader/babel'],
+               plugins: !isProduction && new webpack.HotModuleReplacementPlugin(),
             },
           },
           'ts-loader',
