@@ -42,8 +42,7 @@ module.exports = {
     // and the error in browser is ONLY the RHL misconfiguration.
   },
 },
-  },
-  module: {
+module: {
     rules: [
       // .ts, .tsx
       {
