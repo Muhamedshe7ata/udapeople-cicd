@@ -26,43 +26,30 @@ module.exports = {
     publicPath: process.env.FRONTEND_URL || '/',
   },
   target: 'web',
- resolve: {
-  modules: [
-    path.resolve(__dirname, 'src'),
-    path.resolve(__dirname, 'node_modules'), // Good to be explicit
-    'node_modules'
-  ],
-  extensions: ['.js', '.ts', '.tsx'],
-  mainFields: ['module', 'browser', 'main'],
-  alias: {
-    app: path.resolve(__dirname, 'src/app/'),
-    assets: path.resolve(__dirname, 'src/assets/'),
-    // NO ALIAS FOR 'react-dom' <-- Correct for this attempt
+  resolve: {
+    extensions: ['.js', '.ts', '.tsx'],
+    // Fix webpack's default behavior to not load packages with jsnext:main module
+    // (jsnext:main directs not usually distributable es6 format, but es6 sources)
+    mainFields: ['module', 'browser', 'main'],
+    alias: {
+      app: path.resolve(__dirname, 'src/app/'),
+      assets: path.resolve(__dirname, 'src/assets/'),
+    },
   },
-},
-module: {
+  module: {
     rules: [
       // .ts, .tsx
-        {
+      {
         test: /\.tsx?$/,
-        use: (() => {
-          const loaders = ['ts-loader'];
-          if (!isProduction) {
-            loaders.unshift({ // Add babel-loader to the beginning of the array
-              loader: 'babel-loader',
-              options: {
-
-                   presets: [
-                     '@babel/preset-env',    // For modern JavaScript features
-                     '@babel/preset-react',   // For JSX
-                     '@babel/preset-typescript' // For TypeScript
-                   ],
-                   plugins: ['react-hot-loader/babel'],
-              },
-            });
-          }
-          return loaders;
-        })(),
+        use: [
+          !isProduction && {
+            loader: 'babel-loader',
+            options: {
+              plugins: ['react-hot-loader/babel'],
+            },
+          },
+          'ts-loader',
+        ].filter(Boolean),
       },
       // locale css
       {
@@ -183,10 +170,8 @@ module: {
       TITLE: process.env.TITLE || 'Welcome',
       API_URL: process.env.API_URL,
       WP_HELP_EMAIL: process.env.WP_HELP_EMAIL,
-      
     }),
-    !isProduction && new webpack.HotModuleReplacementPlugin(), // <-- ADD THIS LINE
-     ].filter(Boolean),
+  ],
   devServer: {
     contentBase: sourcePath,
     hot: true,

@@ -14,7 +14,7 @@ module.exports = {
     merge_logs: true, // If true, merges logs from all instances of this app
 
     // Default environment variables (used if no specific --env is specified or if vars aren't in the targeted env)
-    env: {
+    env: {  
       NODE_ENV: "development", // Default environment
       // You can add other development-specific variables here if needed
     },
@@ -43,6 +43,19 @@ module.exports = {
       AWS_REGION: "eu-north-1", // Your AWS region if needed by the application
       // Add any other environment variables your application needs for production here
       // EXAMPLE_API_KEY: "your_production_api_key",
-    }
+    },
+
+    // Additional configuration (moved out of env_production)
+    resolve: {
+      alias: {
+        'react-dom': '@hot-loader/react-dom' // This is crucial
+      }
+    },
+    devServer: {
+      hot: true,  
+      Plugins: [
+        new webpack.HotModuleReplacementPlugin() // Enable HMR globally
+      ]
+    },
   }]
 };
