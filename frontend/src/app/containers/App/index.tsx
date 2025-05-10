@@ -56,6 +56,6 @@ class App extends Component<App.Props> {
   }
 }
 
-export default connect()(hot(App));
+// export default connect()(hot(App));
 const HotApp = hot(App);
 export default connect()(HotApp);
