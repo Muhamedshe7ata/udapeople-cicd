@@ -27,21 +27,20 @@ module.exports = {
   },
   target: 'web',
   resolve: {
+  modules: [ // <-- ADD THIS
+    path.resolve(__dirname, 'src'),
+    path.resolve(__dirname, 'node_modules'),
+    'node_modules'
+  ],
   extensions: ['.js', '.ts', '.tsx'],
   mainFields: ['module', 'browser', 'main'],
   alias: {
     app: path.resolve(__dirname, 'src/app/'),
     assets: path.resolve(__dirname, 'src/assets/'),
-    // Option A: More targeted alias (if the direct alias is too broad)
-    // 'react-dom': process.env.NODE_ENV === 'production' ? 'react-dom' : '@hot-loader/react-dom',
-
-    // Option B: Let's try being more explicit about the path to @hot-loader/react-dom.
-    // This assumes @hot-loader/react-dom is indeed installed.
-    'react-dom': path.resolve(__dirname, './node_modules/@hot-loader/react-dom'),
-    // OR, if the above is too aggressive, revert to no alias for react-dom temporarily to see if build passes
-    // and the error in browser is ONLY the RHL misconfiguration.
+    // KEEP 'react-dom' ALIAS COMMENTED OUT FOR NOW, OR TRY THE CONDITIONAL ONE
+    'react-dom': !isProduction ? '@hot-loader/react-dom' : 'react-dom',
   },
-},
+ },
 module: {
     rules: [
       // .ts, .tsx
