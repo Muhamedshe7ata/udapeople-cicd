@@ -26,8 +26,8 @@ module.exports = {
     publicPath: process.env.FRONTEND_URL || '/',
   },
   target: 'web',
-  resolve: {
-  modules: [ // <-- ADD THIS
+   resolve: {
+  modules: [
     path.resolve(__dirname, 'src'),
     path.resolve(__dirname, 'node_modules'),
     'node_modules'
@@ -37,10 +37,9 @@ module.exports = {
   alias: {
     app: path.resolve(__dirname, 'src/app/'),
     assets: path.resolve(__dirname, 'src/assets/'),
-    // KEEP 'react-dom' ALIAS COMMENTED OUT FOR NOW, OR TRY THE CONDITIONAL ONE
-    'react-dom': !isProduction ? '@hot-loader/react-dom' : 'react-dom',
+    // NO ALIAS FOR 'react-dom'
   },
- },
+},
 module: {
     rules: [
       // .ts, .tsx
